@@ -50,6 +50,7 @@ const YeastSimulation = () => {
       antialias: true 
     });
     rendererRef.current = renderer;
+    renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(400, 400);
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
