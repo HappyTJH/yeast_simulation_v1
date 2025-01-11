@@ -53,6 +53,8 @@ const YeastSimulation = () => {
     });
     rendererRef.current = renderer;
     renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.shadowMap.enabled = true; // 启用阴影
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap; // 设置阴影类型（柔和阴影）
     renderer.setSize(400, 400);
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
