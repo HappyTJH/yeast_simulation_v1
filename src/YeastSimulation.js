@@ -90,7 +90,7 @@ const YeastSimulation = () => {
     geometry.scale(length, 1, 1);
     
     const material = new THREE.MeshPhongMaterial({
-      color: 0xff0000,
+      color: 0xffffff,
       specular: 0xffffff,
       shininess: 60,
       transparent: true,
