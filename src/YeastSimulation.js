@@ -43,7 +43,9 @@ const YeastSimulation = () => {
 
     const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
     cameraRef.current = camera;
-    camera.position.z = 35;  // 调整相机距离以适应更多细胞
+    camera.position.set(0, 0, 30);
+    camera.lookAt(scene.position);
+
 
     const renderer = new THREE.WebGLRenderer({ 
       canvas: canvasRef.current,
@@ -86,9 +88,9 @@ const YeastSimulation = () => {
     geometry.scale(length, 1, 1);
     
     const material = new THREE.MeshPhongMaterial({
-      color: 0xff9966,
-      specular: 0x555555,
-      shininess: 30,
+      color: 0xffd700,
+      specular: 0xffffff,
+      shininess: 60,
       transparent: true,
       opacity: 0.9
     });
