@@ -98,6 +98,9 @@ const YeastSimulation = () => {
     });
 
     const cell = new THREE.Mesh(geometry, material);
+      // 启用细胞的阴影投射和接收功能
+    cell.castShadow = true;    // 允许细胞投射阴影
+    cell.receiveShadow = true; // 允许细胞接收阴影
     
     if (position) {
       cell.position.copy(position);
