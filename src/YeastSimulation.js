@@ -62,6 +62,7 @@ const YeastSimulation = () => {
 
     const pointLight = new THREE.PointLight(0xffffff, 2);
     pointLight.position.set(0, 20, 20);
+    pointLight.castShadow = true; // 启用点光源的阴影投射
     scene.add(pointLight);
 
     addInitialCell();
