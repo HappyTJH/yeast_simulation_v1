@@ -55,11 +55,11 @@ const YeastSimulation = () => {
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(400, 400);
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
     scene.add(ambientLight);
 
-    const pointLight = new THREE.PointLight(0xffffff, 1);
-    pointLight.position.set(10, 10, 10);
+    const pointLight = new THREE.PointLight(0xffffff, 2);
+    pointLight.position.set(0, 20, 20);
     scene.add(pointLight);
 
     addInitialCell();
