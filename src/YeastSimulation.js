@@ -23,8 +23,8 @@ const YeastSimulation = () => {
   const cameraRef = useRef(null);
   const cellsRef = useRef([]);
   const totalCellCountRef = useRef(1);
-  const MAX_VISIBLE_CELLS = 200;  // 增加到200个可见细胞
-  const MAX_TOTAL_CELLS = 450000;
+  const MAX_VISIBLE_CELLS = 400;  // 增加到400个可见细胞
+  const MAX_TOTAL_CELLS = 4500000;
   const MAX_LENGTH_RATIO = 2.0;
 
   const calculateCellLength = (oxygen) => {
@@ -90,7 +90,7 @@ const YeastSimulation = () => {
     geometry.scale(length, 1, 1);
     
     const material = new THREE.MeshPhongMaterial({
-      color: 0xffff00,
+      color: 0xff0000,
       specular: 0xffffff,
       shininess: 60,
       transparent: true,
