@@ -24,7 +24,7 @@ const YeastSimulation = () => {
   const cellsRef = useRef([]);
   const totalCellCountRef = useRef(1);
   const MAX_VISIBLE_CELLS = 400;  // 增加到400个可见细胞
-  const MAX_TOTAL_CELLS = 4500000;
+  const MAX_TOTAL_CELLS = 999999999;
   const MAX_LENGTH_RATIO = 2.0;
 
   const calculateCellLength = (oxygen) => {
@@ -61,7 +61,7 @@ const YeastSimulation = () => {
     scene.add(ambientLight);
 
     const pointLight = new THREE.PointLight(0xffffff, 2);
-    pointLight.position.set(0, 20, 20);
+    pointLight.position.set(10, 10, 10);
     pointLight.castShadow = true; // 启用点光源的阴影投射
     scene.add(pointLight);
 
@@ -93,7 +93,7 @@ const YeastSimulation = () => {
     const material = new THREE.MeshPhongMaterial({
       color: 0xffff00,
       specular: 0xffffff,
-      shininess: 60,
+      shininess: 100,
       transparent: true,
       opacity: 0.9
     });
@@ -166,6 +166,13 @@ const YeastSimulation = () => {
     const angle = Math.random() * Math.PI * 2;
     const separationDistance = 3;
     let progress = 0;
+
+    if (
+      totalCellCountRef.current >= 999999999 &&// 实际总细胞数达到上限
+      cellsRef.current.length >= 400           // 可见细胞数达到上限
+    ) {
+      setIsPaused(true); // 自动暂停
+    }
 
     const animate = () => {
       if (progress >= 1) {
@@ -250,84 +257,87 @@ addInitialCell();
     setIsPaused(true);
   };
 
+  const minutes = Math.floor(timeStep / 10); // 计算分钟
+  const seconds = ((timeStep % 10) * 6).toFixed(0); // 计算秒
+
   return (
-    <div className="w-full max-w-3xl p-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>3D酵母生长模拟</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-4 mb-4">
-            <Button 
-              onClick={() => setIsPaused(!isPaused)}
-              className="w-24"
-            >
-              {isPaused ? '开始' : '暂停'}
-            </Button>
-            <Button 
-              onClick={handleReset}
-              className="w-24"
-            >
-              重置
-            </Button>
+    <Card className="w-full max-w-3xl">
+      <CardHeader>
+        <CardTitle>酵母生长模拟</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex gap-4 mb-4">
+          <Button 
+            onClick={() => setIsPaused(!isPaused)}
+            className="w-24"
+          >
+            {isPaused ? '开始' : '暂停'}
+          </Button>
+          <Button 
+            onClick={handleReset}
+            className="w-24"
+          >
+            重置
+          </Button>
+        </div>
+  
+        <div className="grid grid-cols-2 gap-8">
+          <div>
+            <div className="mb-2">氧气浓度: {environment.oxygen}%</div>
+            <input
+              type="range"
+              value={environment.oxygen}
+              onChange={(e) => setEnvironment(prev => ({...prev, oxygen: parseInt(e.target.value)}))}
+              min={0}
+              max={100}
+              className="w-full"
+            />
           </div>
-
-          <div className="grid grid-cols-2 gap-8">
-            <div>
-              <div className="mb-2">氧气浓度: {environment.oxygen}%</div>
-              <input
-                type="range"
-                value={environment.oxygen}
-                onChange={(e) => setEnvironment(prev => ({...prev, oxygen: parseInt(e.target.value)}))}
-                min={0}
-                max={100}
-                className="w-full"
-              />
-            </div>
-
-            <div>
-              <div className="mb-2">温度: {environment.temperature}°C</div>
-              <input
-                type="range"
-                value={environment.temperature}
-                onChange={(e) => setEnvironment(prev => ({...prev, temperature: parseInt(e.target.value)}))}
-                min={20}
-                max={40}
-                className="w-full"
-              />
+  
+          <div>
+            <div className="mb-2">温度: {environment.temperature}°C</div>
+            <input
+              type="range"
+              value={environment.temperature}
+              onChange={(e) => setEnvironment(prev => ({...prev, temperature: parseInt(e.target.value)}))}
+              min={20}
+              max={40}
+              className="w-full"
+            />
+          </div>
+        </div>
+  
+        <div className="grid grid-cols-2 gap-8 mt-4">
+          <div className="flex justify-center items-center bg-gray-100 rounded-lg p-4">
+            <canvas 
+              ref={canvasRef} 
+              className="rounded-lg"
+              style={{ width: '400px', height: '400px' }}
+            />
+          </div>
+  
+          <div className="p-4 bg-white rounded-lg shadow">
+            <div className="text-sm space-y-2">
+              <div className="font-bold mb-2">实时统计数据:</div>
+              <div>实际总细胞数: {stats.totalCells.toLocaleString()}</div>
+              <div>可见细胞数: {stats.visibleCells}</div>
+              <div>生长速率: {stats.growthRate}%</div>
+              {/* <div>时间步长: {timeStep}</div> */}
+              <div>时间: {minutes} 分钟 {seconds} 秒</div>
+              {environment.oxygen < 20 ? 
+                <div className="text-blue-600">厌氧条件: 新生成的细胞呈现伸长状态</div> :
+                <div className="text-green-600">需氧条件: 细胞保持圆形</div>
+              }
+              {Math.abs(environment.temperature - 30) > 5 &&
+                <div className="text-yellow-600">温度偏离最适范围，生长受限</div>
+              }
             </div>
           </div>
-
-          <div className="grid grid-cols-2 gap-8 mt-4">
-            <div className="flex justify-center items-center bg-gray-100 rounded-lg p-4">
-              <canvas 
-                ref={canvasRef} 
-                className="rounded-lg"
-                style={{ width: '400px', height: '400px' }}
-              />
-            </div>
-
-            <div className="p-4 bg-white rounded-lg shadow">
-              <div className="text-sm space-y-2">
-                <div className="font-bold mb-2">实时统计数据:</div>
-                <div>实际总细胞数: {stats.totalCells.toLocaleString()}</div>
-                <div>可见细胞数: {stats.visibleCells}</div>
-                <div>生长速率: {stats.growthRate}%</div>
-                <div>时间步长: {timeStep}</div>
-                {environment.oxygen < 20 ? 
-                  <div className="text-blue-600">厌氧条件: 新生成的细胞呈现伸长状态</div> :
-                  <div className="text-green-600">需氧条件: 细胞保持圆形</div>
-                }
-                {Math.abs(environment.temperature - 30) > 5 &&
-                  <div className="text-yellow-600">温度偏离最适范围，生长受限</div>
-                }
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </CardContent>
+    </Card>
   );
+  
 };
 
 export default YeastSimulation;
