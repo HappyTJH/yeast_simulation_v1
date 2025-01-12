@@ -363,6 +363,15 @@ addInitialCell();
                 <div className="text-yellow-600">温度偏离最适范围，生长受限</div>
               }
             </div>
+            <div className="mt-6 text-gray-600 text-sm text-left">
+            <p>
+    本 Software 模拟了 <strong>酵母菌的三维生长过程</strong>，其核心可以提炼为一个生物数学建模框架，
+    Model描述了 <strong>细胞形态、生长速率、分裂机制</strong> 与环境条件（如氧气浓度、温度）之间的相互关系。
+             </p>
+              <p className="mt-2">
+    这个框架可以进一步推广，模拟更复杂的细胞生长行为或引入其他环境变量（如营养浓度、竞争等）。
+              </p>
+            </div>
           </div>
         </div>
       </CardContent>
