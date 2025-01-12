@@ -13,7 +13,7 @@ const YeastSimulation = () => {
     growthRate: 0
   });
   const [environment, setEnvironment] = useState({
-    oxygen: 80,
+    oxygen: 10,
     temperature: 30
   });
 
@@ -23,9 +23,9 @@ const YeastSimulation = () => {
   const cameraRef = useRef(null);
   const cellsRef = useRef([]);
   const totalCellCountRef = useRef(1);
-  const MAX_VISIBLE_CELLS = 400;  // 增加到400个可见细胞
+  const MAX_VISIBLE_CELLS = 800;  // 增加到800个可见细胞
   const MAX_TOTAL_CELLS = 999999999;
-  const MAX_LENGTH_RATIO = 2.0;
+  const MAX_LENGTH_RATIO = 1.8;
 
   const calculateCellLength = (oxygen) => {
     if (oxygen >= 20) {
@@ -60,23 +60,51 @@ const YeastSimulation = () => {
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
     scene.add(ambientLight);
 
-    const pointLight = new THREE.PointLight(0xffffff, 2);
+    const pointLight = new THREE.PointLight(0xffffff, 3);
     pointLight.position.set(10, 10, 10);
     pointLight.castShadow = true; // 启用点光源的阴影投射
     scene.add(pointLight);
+
+    const spotLight = new THREE.SpotLight(0xffffff, 2);
+    spotLight.position.set(15, 40, 35);
+    spotLight.castShadow = true;
+    scene.add(spotLight);
 
     addInitialCell();
 
     const animate = () => {
       requestAnimationFrame(animate);
+      
+      // 细胞始终旋转
+      cellsRef.current.forEach(cell => {
+        cell.rotation.x += cell.userData.rotationSpeedX;
+        cell.rotation.y += cell.userData.rotationSpeedY;
+        cell.rotation.z += cell.userData.rotationSpeedZ;
+      });
+    
       if (!isPaused) {
+        // 只有在未暂停时更新其他逻辑
         cellsRef.current.forEach(cell => {
-          cell.rotation.x += 0.01;
-          cell.rotation.y += 0.01;
+          if (!cell.userData.dividing) {
+            cell.userData.growthStage += calculateGrowthRate() / 2000;
+            if (cell.userData.growthStage >= 1) {
+              divideCellProcess(cell);
+            }
+          }
         });
+    
+        // 更新细胞形状
+        cellsRef.current.forEach(cell => {
+          const targetLength = calculateCellLength(environment.oxygen);
+          cell.scale.x += (targetLength - cell.scale.x) * 0.1;
+        });
+    
+        updateStats();
       }
+    
       renderer.render(scene, camera);
     };
+    
     animate();
 
     return () => {
@@ -93,7 +121,7 @@ const YeastSimulation = () => {
     const material = new THREE.MeshPhongMaterial({
       color: 0xffff00,
       specular: 0xffffff,
-      shininess: 100,
+      shininess: 120,
       transparent: true,
       opacity: 0.9
     });
@@ -119,6 +147,9 @@ const YeastSimulation = () => {
     cell.rotation.z = Math.random() * Math.PI;
 
     cell.userData = {
+      rotationSpeedX: Math.random() * 0.016, // 随机 X 轴旋转速度
+      rotationSpeedY: Math.random() * 0.016, // 随机 Y 轴旋转速度
+      rotationSpeedZ: Math.random() * 0.016, // 随机 Z 轴旋转速度
       growthStage: 0,
       dividing: false,
       createdAtOxygen: oxygen,
@@ -169,7 +200,7 @@ const YeastSimulation = () => {
 
     if (
       totalCellCountRef.current >= 999999999 &&// 实际总细胞数达到上限
-      cellsRef.current.length >= 400           // 可见细胞数达到上限
+      cellsRef.current.length >= 800           // 可见细胞数达到上限
     ) {
       setIsPaused(true); // 自动暂停
     }
@@ -263,7 +294,7 @@ addInitialCell();
   return (
     <Card className="w-full max-w-3xl">
       <CardHeader>
-        <CardTitle>酵母生长模拟</CardTitle>
+        <CardTitle>3D酵母生长模拟</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex gap-4 mb-4">
