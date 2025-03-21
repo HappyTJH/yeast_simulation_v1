@@ -1,20 +1,35 @@
-import React from 'react';
-import { cn } from "../../lib/utils";
+import * as React from "react"
 
-const Card = ({ className, ...props }) => (
-  <div className={cn("rounded-xl border bg-card text-card-foreground shadow", className)} {...props} />
-);
+const Card = React.forwardRef(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={`rounded-lg border bg-card text-card-foreground shadow-sm ${className}`}
+    {...props}
+  />
+))
+Card.displayName = "Card"
 
-const CardHeader = ({ className, ...props }) => (
-  <div className={cn("flex flex-col space-y-1.5 p-6", className)} {...props} />
-);
+const CardHeader = React.forwardRef(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={`flex flex-col space-y-1.5 p-6 ${className}`}
+    {...props}
+  />
+))
+CardHeader.displayName = "CardHeader"
 
-const CardTitle = ({ className, ...props }) => (
-  <h3 className={cn("font-semibold leading-none tracking-tight", className)} {...props} />
-);
+const CardTitle = React.forwardRef(({ className, ...props }, ref) => (
+  <h3
+    ref={ref}
+    className={`text-2xl font-semibold leading-none tracking-tight ${className}`}
+    {...props}
+  />
+))
+CardTitle.displayName = "CardTitle"
 
-const CardContent = ({ className, ...props }) => (
-  <div className={cn("p-6 pt-0", className)} {...props} />
-);
+const CardContent = React.forwardRef(({ className, ...props }, ref) => (
+  <div ref={ref} className={`p-6 pt-0 ${className}`} {...props} />
+))
+CardContent.displayName = "CardContent"
 
-export { Card, CardHeader, CardTitle, CardContent };
+export { Card, CardHeader, CardTitle, CardContent }
