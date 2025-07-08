@@ -5,8 +5,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { Raycaster } from 'three';
+import { ResistanceSim3D } from "./ResistanceSim3D";
 
 function YeastSimulation() {
+  const [showResistanceSim3D, setShowResistanceSim3D] = useState(false);
   // 管理模拟的状态
   const [isPaused, setIsPaused] = useState(true); // 模拟是否暂停
   const [timeStep, setTimeStep] = useState(0); // 时间步长，控制生长速率
@@ -35,7 +37,7 @@ function YeastSimulation() {
   const raycasterRef = useRef(new Raycaster()); // 射线检测器的引用
   const mouseRef = useRef(new THREE.Vector2()); // 鼠标位置的引用
   const cellIdCounterRef = useRef(1); // 细胞ID计数器的引用
-  const MAX_VISIBLE_CELLS = 2100;  // 最大可见细胞数
+  const MAX_VISIBLE_CELLS = 2300;  // 最大可见细胞数
   const MAX_TOTAL_CELLS = 999999999; // 最大总细胞数
   const MAX_LENGTH_RATIO = 1.8; // 最大细胞长度比例
 
@@ -86,17 +88,28 @@ function YeastSimulation() {
   };
 
   useEffect(() => {
+    // 如果显示ResistanceSim3D组件，则不初始化Three.js场景
+    if (showResistanceSim3D) return;
+    
     // 初始化 Three.js 场景
     const scene = new THREE.Scene();
     sceneRef.current = scene;
-    scene.background = new THREE.Color(0x000000); // 设置背景为黑色
-  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    scene.background = null; // 设置背景为透明
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     cameraRef.current = camera;
     camera.position.set(0, 0, 30);
     camera.lookAt(scene.position);
-  const renderer = new THREE.WebGLRenderer({ 
+    
+    // 确保canvas元素存在
+    if (!canvasRef.current) {
+      console.error('Canvas元素不存在');
+      return;
+    }
+    
+    const renderer = new THREE.WebGLRenderer({ 
       canvas: canvasRef.current,
-      antialias: true 
+      antialias: true ,
+      alpha: true // 启用透明背景
     });
     rendererRef.current = renderer;
     renderer.setPixelRatio(window.devicePixelRatio);
@@ -109,6 +122,7 @@ function YeastSimulation() {
     
     // 添加窗口大小变化的事件监听器
     const handleResize = () => {
+      if (!canvasRef.current) return;
       const width = canvasRef.current.clientWidth;
       const height = canvasRef.current.clientHeight;
       cameraRef.current.aspect = width / height;
@@ -122,7 +136,8 @@ function YeastSimulation() {
     canvasRef.current.addEventListener('click', handleMouseClick);
     // 初始调用一次以确保尺寸正确
     handleResize();
-  // 初始化OrbitControls
+    
+    // 初始化OrbitControls
     const controls = new OrbitControls(camera, renderer.domElement);
     controlsRef.current = controls;
     controls.enableDamping = true; // 启用阻尼效果
@@ -137,18 +152,18 @@ function YeastSimulation() {
     let isDragging = false;
     let previousMousePosition = { x: 0, y: 0 };
     
-    renderer.domElement.addEventListener('contextmenu', (event) => {
+    const handleContextMenu = (event) => {
       event.preventDefault(); // 阻止默认右键菜单
-    });
+    };
     
-    renderer.domElement.addEventListener('mousedown', (event) => {
+    const handleMouseDown = (event) => {
       if (event.button === 2) { // 右键
         isDragging = true;
         previousMousePosition = { x: event.clientX, y: event.clientY };
       }
-    });
+    };
     
-    renderer.domElement.addEventListener('mousemove', (event) => {
+    const handleMouseMove = (event) => {
       if (isDragging) {
         // 计算鼠标移动距离
         const deltaX = event.clientX - previousMousePosition.x;
@@ -168,17 +183,23 @@ function YeastSimulation() {
         
         previousMousePosition = { x: event.clientX, y: event.clientY };
       }
-    });
+    };
     
-    renderer.domElement.addEventListener('mouseup', (event) => {
+    const handleMouseUp = (event) => {
       if (event.button === 2) {
         isDragging = false;
       }
-    });
+    };
     
-    renderer.domElement.addEventListener('mouseleave', () => {
+    const handleMouseLeave = () => {
       isDragging = false;
-    });
+    };
+    
+    renderer.domElement.addEventListener('contextmenu', handleContextMenu);
+    renderer.domElement.addEventListener('mousedown', handleMouseDown);
+    renderer.domElement.addEventListener('mousemove', handleMouseMove);
+    renderer.domElement.addEventListener('mouseup', handleMouseUp);
+    renderer.domElement.addEventListener('mouseleave', handleMouseLeave);
     
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
     scene.add(ambientLight); // 环境光
@@ -197,8 +218,9 @@ function YeastSimulation() {
     addInitialCell();
 
     // 动画循环
+    let animationFrameId;
     const animate = () => {
-      requestAnimationFrame(animate);
+      animationFrameId = requestAnimationFrame(animate);
 
       if (!isPaused) {
         // 更新细胞生长
@@ -220,19 +242,47 @@ function YeastSimulation() {
         updateStats(); // 更新统计数据
       }
 
-      controlsRef.current.update(); // 更新控制器状态
+      if (controlsRef.current) {
+        controlsRef.current.update(); // 更新控制器状态
+      }
       renderer.render(scene, camera);
     };
 
     animate();
 
     return () => {
-      scene.clear();
-      renderer.dispose();
-      controls.dispose(); // 清理控制器
-      canvasRef.current.removeEventListener('click', handleMouseClick); // 移除鼠标点击事件监听器
+      // 取消动画循环
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      
+      // 移除事件监听器
+      window.removeEventListener('resize', handleResize);
+      if (canvasRef.current) {
+        canvasRef.current.removeEventListener('click', handleMouseClick);
+      }
+      
+      if (renderer.domElement) {
+        renderer.domElement.removeEventListener('contextmenu', handleContextMenu);
+        renderer.domElement.removeEventListener('mousedown', handleMouseDown);
+        renderer.domElement.removeEventListener('mousemove', handleMouseMove);
+        renderer.domElement.removeEventListener('mouseup', handleMouseUp);
+        renderer.domElement.removeEventListener('mouseleave', handleMouseLeave);
+      }
+      
+      // 清理Three.js资源
+      if (scene) scene.clear();
+      if (renderer) renderer.dispose();
+      if (controlsRef.current) controlsRef.current.dispose();
+      
+      // 重置引用
+      sceneRef.current = null;
+      rendererRef.current = null;
+      cameraRef.current = null;
+      controlsRef.current = null;
+      cellsRef.current = [];
     };
-  }, []);
+  }, [showResistanceSim3D]); // 添加showResistanceSim3D作为依赖项，使其在状态变化时重新初始化场景
 
   // 创建酵母细胞的函数
   const createYeastCell = (position, oxygen, parentCellId = null) => {
@@ -326,6 +376,7 @@ function YeastSimulation() {
       divisionDelay: Math.random() * 0.3, // 随机分裂延迟 (0-0.3)
       canDivide: true, // 标记细胞是否可以分裂
       isInitialCell: false, // 默认不是初始细胞
+      isChildOfDividedCell: parentCellId ? true : false, // 标记是否是已分裂细胞的子细胞
       cellId: parentCellId ? parentCellId + 1 : cellIdCounterRef.current // 细胞编号
     };
 
@@ -345,14 +396,18 @@ function YeastSimulation() {
     if (yeastType === 'snowflake') {
       // 雪花酵母的初始属性
       cell.userData.divisionDelay = 0.1; // 减少初始细胞的分裂延迟
-      // 为雪花酵母设置六个方向的分裂延迟时间，使子细胞错落有致地生成
+      // 为雪花酵母设置十个方向的分裂延迟时间，对应立方体的八个顶点加上X轴正负方向
       cell.userData.directionDelays = [
-        0.1,  // X轴正方向延迟
-        0.5,  // X轴负方向延迟
-        0.3,  // Y轴正方向延迟
-        0.9,  // Y轴负方向延迟
-        0.7,  // Z轴正方向延迟
-        1.1   // Z轴负方向延迟
+        0.1,  // 右上前方向延迟
+        0.3,  // 右上后方向延迟
+        0.5,  // 右下前方向延迟
+        0.7,  // 右下后方向延迟
+        0.2,  // 左上前方向延迟
+        0.4,  // 左上后方向延迟
+        0.6,  // 左下前方向延迟
+        0.8,  // 左下后方向延迟
+        0.15, // X轴正方向延迟
+        0.25  // X轴负方向延迟
       ];
     } else {
       // 普通酵母的初始属性
@@ -433,8 +488,8 @@ function YeastSimulation() {
     // 根据酵母类型应用不同的分裂规则
     if (yeastType === 'snowflake') {
       // 雪花酵母的分裂规则：
-      // 如果是初始细胞且已经分裂了6次，则不再分裂
-      if (isInitialCell && parentCell.userData.divisionCount >= 6) return;
+      // 如果是初始细胞且已经分裂了10次，则不再分裂（修改为10个方向：8个卦限+X轴正负方向）
+      if (isInitialCell && parentCell.userData.divisionCount >= 10) return;
       
       // 如果不是初始细胞且已经分裂过，则不再分裂
       if (!isInitialCell && parentCell.userData.divisionCount >= 1) return;
@@ -452,21 +507,43 @@ function YeastSimulation() {
 
     // 根据酵母类型应用不同的子细胞产生逻辑
     let produceTwoCells;
+    // 检查是否是已分裂细胞的子细胞
+    const isChildOfDividedCell = parentCell.userData.isChildOfDividedCell;
+    
     if (yeastType === 'snowflake') {
-      // 雪花酵母：初始细胞必定产生一个子细胞，其他细胞有60%概率产生两个子细胞
-      produceTwoCells = !isInitialCell && Math.random() < 0.6;
+      // 雪花酵母：初始细胞必定产生一个子细胞
+      // 如果是已分裂细胞的子细胞，则分裂概率降低到30%（原来60%的50%）
+      // 其他细胞有60%概率产生两个子细胞
+      if (isChildOfDividedCell) {
+        produceTwoCells = !isInitialCell && Math.random() < 0.3; // 降低到50%
+      } else {
+        produceTwoCells = !isInitialCell && Math.random() < 0.6;
+      }
     } else {
-      // 普通酵母：初始细胞必定产生一个子细胞，其他细胞有60%概率产生两个子细胞
-      produceTwoCells = !isInitialCell && Math.random() < 0.6;
+      // 普通酵母：初始细胞必定产生一个子细胞
+      // 如果是已分裂细胞的子细胞，则分裂概率降低到30%（原来60%的50%）
+      // 其他细胞有60%概率产生两个子细胞
+      if (isChildOfDividedCell) {
+        produceTwoCells = !isInitialCell && Math.random() < 0.3; // 降低到50%
+      } else {
+        produceTwoCells = !isInitialCell && Math.random() < 0.6;
+      }
     }
     
     // 创建第一个新细胞，传递父细胞的ID
     const newCell1 = createYeastCell(null, environment.oxygen, parentCell.userData.cellId);
     
+    // 如果父细胞已经产生了两个子细胞，则标记这些子细胞
+    if (produceTwoCells) {
+      newCell1.userData.isChildOfDividedCell = true;
+    }
+    
     // 如果需要产生第二个子细胞，则创建
     let newCell2 = null;
     if (produceTwoCells) {
       newCell2 = createYeastCell(null, environment.oxygen, parentCell.userData.cellId);
+      // 标记第二个子细胞
+      newCell2.userData.isChildOfDividedCell = true;
     }
     
     // 添加新细胞到场景 - 确保所有新细胞都被添加到场景中
@@ -509,7 +586,7 @@ function YeastSimulation() {
     
     if (isInitialCell) {
       if (yeastType === 'snowflake') {
-        // 雪花酵母的初始细胞分裂方向逻辑
+        // 雪花酵母的初始细胞分裂方向逻辑 - 修改为八卦限方向（立方体8个顶点）
         // 生成随机角度偏移（5-15度之间）
         const randomAngleOffset = (5 + Math.random() * 10) * (Math.PI / 180);
         const randomAxisOffset = new THREE.Vector3(
@@ -518,36 +595,36 @@ function YeastSimulation() {
           (Math.random() - 0.5) * 0.3
         ).normalize();
         
+        // 定义10个方向向量：立方体8个顶点（八卦限方向）加上X轴正负方向
+        const snowflakeDirections = [
+          new THREE.Vector3(1, 1, 1),    // 右上前
+          new THREE.Vector3(1, 1, -1),   // 右上后
+          new THREE.Vector3(1, -1, 1),   // 右下前
+          new THREE.Vector3(1, -1, -1),  // 右下后
+          new THREE.Vector3(-1, 1, 1),   // 左上前
+          new THREE.Vector3(-1, 1, -1),  // 左上后
+          new THREE.Vector3(-1, -1, 1),  // 左下前
+          new THREE.Vector3(-1, -1, -1), // 左下后
+          new THREE.Vector3(1, 0, 0),    // X轴正方向
+          new THREE.Vector3(-1, 0, 0)    // X轴负方向
+        ];
+        
+        // 确保所有方向向量都是单位向量
+        snowflakeDirections.forEach(dir => dir.normalize());
+        
         // 根据已分裂的次数决定分裂方向，并添加随机偏移
         let baseDirection;
         const divisionIndex = parentCell.userData.divisionCount - 1; // 索引从0开始
         
-        switch (divisionIndex) {
-          case 0: // 第一次分裂，沿X轴正方向
-            baseDirection = new THREE.Vector3(1, 0, 0);
-            break;
-          case 1: // 第二次分裂，沿X轴负方向
-            baseDirection = new THREE.Vector3(-1, 0, 0);
-            break;
-          case 2: // 第三次分裂，沿Y轴正方向
-            baseDirection = new THREE.Vector3(0, 1, 0);
-            break;
-          case 3: // 第四次分裂，沿Y轴负方向
-            baseDirection = new THREE.Vector3(0, -1, 0);
-            break;
-          case 4: // 第五次分裂，沿Z轴正方向
-            baseDirection = new THREE.Vector3(0, 0, 1);
-            break;
-          case 5: // 第六次分裂，沿Z轴负方向
-            baseDirection = new THREE.Vector3(0, 0, -1);
-            break;
-          default: // 额外的分裂方向
-            baseDirection = new THREE.Vector3(
-              Math.random() - 0.5,
-              Math.random() - 0.5,
-              Math.random() - 0.5
-            ).normalize();
-            break;
+        if (divisionIndex < snowflakeDirections.length) {
+          baseDirection = snowflakeDirections[divisionIndex];
+        } else {
+          // 如果分裂次数超过10次，使用随机方向
+          baseDirection = new THREE.Vector3(
+            Math.random() - 0.5,
+            Math.random() - 0.5,
+            Math.random() - 0.5
+          ).normalize();
         }
         
         // 使用初始细胞中设置的方向延迟时间
@@ -566,10 +643,19 @@ function YeastSimulation() {
         directionVector1 = baseDirection.clone().applyQuaternion(rotationQuaternion);
         
         // 根据分裂方向调整分离距离
-        // 长轴方向（X轴正负方向，索引0-1）使用正常分离距离
-        // 非长轴方向（Y和Z轴方向，索引2-5）使用较小的分离距离
-        const isLongAxisDirection = divisionIndex <= 1; // 索引0和1是X轴方向（长轴）
-        newCell1.userData.separationFactor = isLongAxisDirection ? 1.0 : 0.8; // 非长轴方向使用80%的分离距离
+        // 判断是否为八卦限方向（前8个方向）
+        const isOctantDirection = divisionIndex < 8;
+        // 判断是否为X轴方向（后2个方向）
+        const isXAxisDirection = divisionIndex >= 8 && divisionIndex < 10;
+        
+        // 八卦限方向使用80%的分离距离，X轴方向使用正常分离距离
+        if (isOctantDirection) {
+          newCell1.userData.separationFactor = 0.8; // 八卦限方向使用80%的分离距离
+        } else if (isXAxisDirection) {
+          newCell1.userData.separationFactor = 1.0; // X轴方向使用正常分离距离
+        } else {
+          newCell1.userData.separationFactor = 0.9; // 其他方向使用90%的分离距离
+        }
       } else {
         // 普通酵母的初始细胞分裂方向逻辑 - 向立方体的8个顶点方向分裂
         const divisionIndex = parentCell.userData.divisionCount - 1; // 索引从0开始
@@ -849,6 +935,10 @@ function YeastSimulation() {
   const minutes = Math.floor(timeStep / 10);
   const seconds = ((timeStep % 10) * 6).toFixed(0);
 
+  if (showResistanceSim3D) {
+    return <ResistanceSim3D onExit={() => setShowResistanceSim3D(false)} />;
+  }
+
   return (
     <Card className="w-full max-w-5xl mx-auto">
       <CardHeader>
@@ -971,6 +1061,8 @@ function YeastSimulation() {
               </div>
             </div>
           </div>
+
+          <Button onClick={() => setShowResistanceSim3D(true)}>切换到3D耐药梯度模型</Button>
         </div>
       </CardContent>
     </Card>
