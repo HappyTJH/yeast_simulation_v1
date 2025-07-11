@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from './components/ui/card';
 import { Button } from './components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select';
+
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { Raycaster } from 'three';
@@ -11,8 +11,7 @@ const ResistanceSim3D = ({ onExit }) => {
   const [isPaused, setIsPaused] = useState(true); // 模拟是否暂停
   const [timeStep, setTimeStep] = useState(0); // 时间步长，控制生长速率
   const [speedMultiplier, setSpeedMultiplier] = useState(1); // 速度倍率，控制模拟速度
-  // 固定使用雪花酵母类型
-  const yeastType = 'snowflake'; // 酵母类型固定为烟花酵母(snowflake)
+  // 使用雪花酵母类型
   const [stats, setStats] = useState({ // 存储实时统计数据
     totalCells: 1, // 总细胞数
     visibleCells: 0, // 可见细胞数
@@ -20,6 +19,15 @@ const ResistanceSim3D = ({ onExit }) => {
     growthRate: 0 // 生长速率
   });
   const [selectedCell, setSelectedCell] = useState(null); // 存储被选中的细胞信息
+  
+  // 抗药性模拟相关状态
+  const [opioidSecreting, setOpioidSecreting] = useState(false); // 阿片肽分泌状态
+  const [antibioticConcentration, setAntibioticConcentration] = useState('none'); // 抗生素浓度：'none', 'low', 'high'
+  const [opioidStartTime, setOpioidStartTime] = useState(0); // 阿片肽开始分泌时间
+  const [antibioticStartTime, setAntibioticStartTime] = useState(0); // 抗生素开始添加时间
+  const opioidFieldRef = useRef(null); // 阿片肽浓度场的引用
+  const antibioticFieldRef = useRef(null); // 抗生素浓度场的引用
+  const opioidTimeRef = useRef(0); // 独立的阿片肽时间追踪
   // 固定环境条件：氧气浓度10%、温度30℃
   const environment = {
     oxygen: 10,
@@ -36,6 +44,7 @@ const ResistanceSim3D = ({ onExit }) => {
   const raycasterRef = useRef(new Raycaster()); // 射线检测器的引用
   const mouseRef = useRef(new THREE.Vector2()); // 鼠标位置的引用
   const cellIdCounterRef = useRef(1); // 细胞ID计数器的引用
+  const timeStepRef = useRef(0); // timeStep的引用，用于在动画循环中获取最新值
   const MAX_VISIBLE_CELLS = 2100;  // 最大可见细胞数
   const MAX_TOTAL_CELLS = 999999999; // 最大总细胞数
   const MAX_LENGTH_RATIO = 1.8; // 最大细胞长度比例
@@ -50,7 +59,69 @@ const ResistanceSim3D = ({ onExit }) => {
       return Math.min(1.0 + lengthIncrease, MAX_LENGTH_RATIO);
     }
   };
+  
+  // 设置细胞突变颜色
+  const setMutationColor = (cell, mutationLevel) => {
+    if (mutationLevel === 0) {
+      // 正常细胞保持白色
+      cell.material.uniforms.color.value.setRGB(1, 1, 1);
+    } else if (mutationLevel === 1) {
+      // 一级突变：浅红色
+      cell.material.uniforms.color.value.setRGB(1, 0.6, 0.6);
+    } else if (mutationLevel === 2) {
+      // 二级突变：深红色
+      cell.material.uniforms.color.value.setRGB(1, 0.2, 0.2);
+    }
+  };
+  
+
   // 处理鼠标点击事件，显示细胞编号
+  // 计算指定位置的阿片肽浓度
+  const calculateOpioidConcentration = (position) => {
+    if (!opioidSecreting) {
+      return 0;
+    }
+    
+    const currentOpioidTime = opioidTimeRef.current;
+    const timeSinceStart = currentOpioidTime;
+    if (timeSinceStart < 0) {
+      return 0;
+    }
+    
+    // 计算距离中心的距离
+    const distance = Math.sqrt(position.x * position.x + position.y * position.y);
+    
+    // 特殊处理：如果是中心位置（祖细胞），立即达到最高浓度
+    if (distance < 0.1) { // 中心区域半径0.1
+      return 1.0; // 100%浓度
+    }
+    
+    // 使用与shader相同的计算逻辑
+    const effectiveTime = Math.max(0.1, timeSinceStart);
+    const diffusionRate = 0.8;
+    const diffusionRadius = diffusionRate * effectiveTime * 2.0;
+    
+    // 如果距离超过当前扩散半径，浓度为0
+    if (distance > diffusionRadius) {
+      return 0;
+    }
+    
+    // 扩散边缘的软化效果
+    const edgeSoftness = 2.0;
+    const edgeFade = 1.0 - Math.max(0, Math.min(1, (distance - (diffusionRadius - edgeSoftness)) / edgeSoftness));
+    
+    // 径向亮度梯度：中心最亮，向外指数衰减
+    const radialGradient = Math.exp(-distance * 0.15);
+    
+    // 时间因子：控制整体强度随时间增长
+    const timeFactor = Math.min(1.0, effectiveTime / 15.0);
+    
+    // 综合浓度计算
+    const concentration = radialGradient * timeFactor * edgeFade;
+    
+    return Math.max(0, Math.min(1, concentration));
+  };
+
   const handleMouseClick = (event) => {
     // 计算鼠标在canvas中的相对位置
     const rect = canvasRef.current.getBoundingClientRect();
@@ -66,10 +137,14 @@ const ResistanceSim3D = ({ onExit }) => {
     if (intersects.length > 0) {
       // 获取第一个相交的细胞
       const selectedCell = intersects[0].object;
+      // 使用细胞已存储的阿片肽浓度，而不是重新计算
+      const opioidConcentration = selectedCell.userData.opioidConcentration || 0;
+      
       // 记录鼠标点击的实际位置，用于显示标签
       setSelectedCell({
         id: selectedCell.userData.cellId,
         position: selectedCell.position.clone(),
+        opioidConcentration: opioidConcentration,
         clickPosition: {
           x: event.clientX - rect.left,
           y: event.clientY - rect.top
@@ -78,6 +153,109 @@ const ResistanceSim3D = ({ onExit }) => {
     } else {
       // 如果没有点击到细胞，清除选中状态
       setSelectedCell(null);
+    }
+  };
+
+  // 创建阿片肽扩散可视化（3D球形扩散）
+  const createOpioidVisualization = () => {
+    if (opioidFieldRef.current) {
+      sceneRef.current.remove(opioidFieldRef.current);
+    }
+    
+    // 创建一个平面来显示阿片肽扩散场，始终面向相机
+    const geometry = new THREE.PlaneGeometry(60, 60, 64, 64);
+    const material = new THREE.ShaderMaterial({
+      uniforms: {
+        time: { value: 0 }, // 初始时间为0
+        diffusionRate: { value: 0.8 }, // 增加扩散速率
+        maxConcentration: { value: 1.0 }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vPosition;
+        void main() {
+          vUv = uv;
+          vPosition = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float time;
+        uniform float diffusionRate;
+        uniform float maxConcentration;
+        varying vec2 vUv;
+        varying vec3 vPosition;
+        
+        void main() {
+          if (time <= 0.0) {
+            discard;
+          }
+          
+          float effectiveTime = max(0.1, time);
+          
+          // 计算从中心(0.5, 0.5)的距离
+          vec2 center = vec2(0.5, 0.5);
+          float distance = length(vUv - center) * 30.0; // 缩放到实际尺寸
+          
+          // 扩散前沿：随时间向外扩展的边界
+          float diffusionRadius = diffusionRate * effectiveTime * 2.0;
+          
+          // 如果距离超过当前扩散半径，则不显示
+          if (distance > diffusionRadius) {
+            discard;
+          }
+          
+          // 扩散边缘的软化效果
+          float edgeSoftness = 2.0;
+          float edgeFade = 1.0 - smoothstep(diffusionRadius - edgeSoftness, diffusionRadius, distance);
+          
+          // 径向亮度梯度：中心最亮，向外指数衰减
+          float radialGradient = exp(-distance * 0.15);
+          
+          // 时间因子：控制整体强度随时间增长
+          float timeFactor = min(1.0, effectiveTime / 15.0);
+          
+          // 综合浓度计算：结合径向梯度、时间因子和边缘淡化
+          float concentration = radialGradient * timeFactor * edgeFade;
+          
+          // 颜色梯度：中心亮白蓝色，边缘深蓝色
+          float colorIntensity = concentration;
+          vec3 centerColor = vec3(0.9, 0.95, 1.0); // 中心更亮的白蓝色
+          vec3 edgeColor = vec3(0.2, 0.4, 0.9);    // 边缘蓝色
+          vec3 color = mix(edgeColor, centerColor, colorIntensity * colorIntensity); // 使用平方增强中心亮度
+          
+          // 透明度：基于浓度和径向梯度
+          float alpha = concentration * (0.5 + 0.4 * radialGradient);
+          alpha = max(alpha, 0.05); // 最小可见度
+          alpha = min(alpha, 0.8); // 限制最大透明度
+          
+          gl_FragColor = vec4(color, alpha);
+        }
+      `,
+      transparent: true,
+        side: THREE.DoubleSide, // 双面渲染
+        depthWrite: false,
+        depthTest: false, // 禁用深度测试以确保可见性
+        blending: THREE.AdditiveBlending, // 恢复加法混合模式
+        opacity: 1.0
+    });
+    
+    const opioidField = new THREE.Mesh(geometry, material);
+    opioidField.position.set(0, 0, 0);
+    
+    opioidFieldRef.current = opioidField;
+    sceneRef.current.add(opioidField);
+  };
+  
+  // 更新阿片肽可视化（平面扩散）
+  const updateOpioidVisualization = () => {
+    if (opioidFieldRef.current && opioidSecreting) {
+      const timeSinceStart = opioidTimeRef.current;
+      opioidFieldRef.current.material.uniforms.time.value = timeSinceStart;
+      
+      // 根据扩散时间调整平面的可见性和大小
+      const diffusionProgress = Math.min(1.0, timeSinceStart / 30.0);
+      opioidFieldRef.current.material.uniforms.maxConcentration.value = diffusionProgress;
     }
   };
 
@@ -192,28 +370,16 @@ const ResistanceSim3D = ({ onExit }) => {
     // 添加初始细胞
     addInitialCell();
 
-    // 动画循环
+    // 动画循环（仅负责渲染和视觉更新）
     const animate = () => {
       requestAnimationFrame(animate);
 
-      if (!isPaused) {
-        // 更新细胞生长
-        cellsRef.current.forEach(cell => {
-          if (!cell.userData.dividing) {
-            cell.userData.growthStage += calculateGrowthRate() / 2000;
-            if (cell.userData.growthStage >= (1 + cell.userData.divisionDelay)) {
-              divideCellProcess(cell);
-            }
-          }
-        });
-
-        // 更新细胞形状（根据氧气浓度调整）
-        cellsRef.current.forEach(cell => {
-          const targetLength = calculateCellLength(environment.oxygen);
-          cell.scale.x += (targetLength - cell.scale.x) * 0.1;
-        });
-
-        updateStats(); // 更新统计数据
+      // 更新阿片肽可视化（独立于细胞生长）
+      updateOpioidVisualization();
+      
+      // 确保扩散平面始终面向相机
+      if (opioidFieldRef.current && cameraRef.current) {
+        opioidFieldRef.current.lookAt(cameraRef.current.position);
       }
 
       controlsRef.current.update(); // 更新控制器状态
@@ -245,20 +411,19 @@ const ResistanceSim3D = ({ onExit }) => {
     const length = calculateCellLength(oxygen); // 计算细胞长度
     const geometry = new THREE.SphereGeometry(1, 32, 32);
     
-    // 根据酵母类型设置不同的参数
-    // 雪花酵母 - 椭圆形，蓝绿色
-    // 普通酵母 - 椭圆形，浅绿色
+    // 雪花酵母 - 椭圆形，白色
     geometry.scale(length, 1, 1); // 调整几何体比例为椭圆形
     
     // 创建自定义着色器材质来实现渐变发光效果
-    // 根据酵母类型设置不同的颜色
-    const cellColor = yeastType === 'normal' ? new THREE.Color(0x90EE90) : new THREE.Color(0x00FFFF); // 普通酵母为浅绿色，烟花酵母为蓝绿色
-    const cellGlowColor = yeastType === 'normal' ? new THREE.Color(0x98FB98) : new THREE.Color(0x40E0D0); // 普通酵母为浅绿色光晕，烟花酵母为蓝绿色光晕
+    // 雪花酵母设置为白色，但会根据阿片肽浓度变绿
+    const cellColor = new THREE.Color(0xFFFFFF); // 雪花酵母为白色
+    const cellGlowColor = new THREE.Color(0xCCCCCC); // 雪花酵母为白色光晕
     
     const customMaterial = new THREE.ShaderMaterial({
       uniforms: {
         color: { value: cellColor },
-        glowColor: { value: cellGlowColor }
+        glowColor: { value: cellGlowColor },
+        opioidConcentration: { value: 0.0 } // 阿片肽浓度uniform
       },
       vertexShader: `
         varying vec3 vNormal;
@@ -272,14 +437,21 @@ const ResistanceSim3D = ({ onExit }) => {
       fragmentShader: `
         uniform vec3 color;
         uniform vec3 glowColor;
+        uniform float opioidConcentration;
         varying vec3 vNormal;
         varying vec3 vPosition;
         void main() {
           float rim = pow(1.0 - abs(dot(vNormal, vec3(0, 0, 1.0))), 1.8);
           float edge = smoothstep(0.2, 1.0, abs(vPosition.x));
           float centerDim = smoothstep(0.0, 0.5, abs(vPosition.x));
-          vec3 finalColor = mix(color, glowColor, rim + edge * 0.4);
-          float alpha = 0.15 + rim * 0.2 + edge * 0.15 - centerDim * 0.05;
+          
+          // 根据阿片肽浓度混合绿色
+          vec3 greenColor = vec3(0.2, 1.0, 0.3); // 亮绿色
+          vec3 baseColor = mix(color, greenColor, opioidConcentration);
+          vec3 baseGlowColor = mix(glowColor, greenColor * 0.8, opioidConcentration);
+          
+          vec3 finalColor = mix(baseColor, baseGlowColor, rim + edge * 0.4);
+          float alpha = 0.15 + rim * 0.2 + edge * 0.15 - centerDim * 0.05 + opioidConcentration * 0.1;
           gl_FragColor = vec4(finalColor, alpha);
         }
       `,
@@ -292,9 +464,9 @@ const ResistanceSim3D = ({ onExit }) => {
     cell.castShadow = true;
     cell.receiveShadow = true;
 
-    // 创建细胞核 - 雪花酵母的细胞核为橙黄色
+    // 创建细胞核 - 雪花酵母的细胞核为灰色
     const nucleusGeometry = new THREE.SphereGeometry(0.3, 16, 16);
-    const nucleusColor = 0xFFA500; // 雪花酵母为橙黄色
+    const nucleusColor = 0x888888; // 雪花酵母为灰色
     const nucleusMaterial = new THREE.MeshPhongMaterial({
       color: nucleusColor,
       emissive: nucleusColor,
@@ -320,6 +492,9 @@ const ResistanceSim3D = ({ onExit }) => {
       );
     }
 
+    // 计算初始阿片肽浓度
+    const initialOpioidConcentration = calculateOpioidConcentration(position || new THREE.Vector3(0, 0, 0));
+    
     // 设置细胞的用户数据
     cell.userData = {
       growthStage: 0, // 生长阶段
@@ -330,8 +505,27 @@ const ResistanceSim3D = ({ onExit }) => {
       divisionDelay: Math.random() * 0.3, // 随机分裂延迟 (0-0.3)
       canDivide: true, // 标记细胞是否可以分裂
       isInitialCell: false, // 默认不是初始细胞
-      cellId: parentCellId ? parentCellId + 1 : cellIdCounterRef.current // 细胞编号
+      isChildOfDividedCell: parentCellId ? true : false, // 标记是否是已分裂细胞的子细胞
+      cellId: parentCellId ? parentCellId + 1 : cellIdCounterRef.current, // 细胞编号
+      // 抗药性相关属性
+      hasResistancePlasmid: false, // 是否具有抗药质粒
+      opioidConcentration: initialOpioidConcentration, // 当前阿片肽浓度
+      resistanceGeneExpression: 0, // 抗药基因表达强度
+      antibioticConcentration: 0, // 当前抗生素浓度
+      survivalProbability: 1.0, // 存活概率
+      isDead: false, // 是否死亡
+      dying: false, // 是否正在死亡
+      deathProgress: 0, // 死亡进度（0-1）
+      mutationLevel: 0 // 突变水平（0-正常，1-轻度突变，2-重度突变）
     };
+    
+    // 初始化shader中的阿片肽浓度uniform
+    if (customMaterial.uniforms && customMaterial.uniforms.opioidConcentration) {
+      customMaterial.uniforms.opioidConcentration.value = initialOpioidConcentration;
+    }
+    
+    // 设置初始突变颜色（默认为0级，即白色）
+    setMutationColor(cell, cell.userData.mutationLevel);
 
     return cell; // 返回创建的细胞
   };
@@ -344,17 +538,22 @@ const ResistanceSim3D = ({ onExit }) => {
     cell.userData.divisionCount = 0; // 初始分裂次数为0
     cell.userData.isInitialCell = true; // 标记为初始细胞
     cell.userData.cellId = 1; // 初始细胞编号为1
+    cell.userData.hasResistancePlasmid = true; // 祖细胞具有抗药质粒
     
     // 设置雪花酵母的初始属性
     cell.userData.divisionDelay = 0.1; // 减少初始细胞的分裂延迟
-    // 为雪花酵母设置六个方向的分裂延迟时间，使子细胞错落有致地生成
+    // 为雪花酵母设置十个方向的分裂延迟时间，对应立方体的八个顶点加上X轴正负方向
     cell.userData.directionDelays = [
-      0.1,  // X轴正方向延迟
-      0.5,  // X轴负方向延迟
-      0.3,  // Y轴正方向延迟
-      0.9,  // Y轴负方向延迟
-      0.7,  // Z轴正方向延迟
-      1.1   // Z轴负方向延迟
+      0.1,  // 右上前方向延迟
+      0.3,  // 右上后方向延迟
+      0.5,  // 右下前方向延迟
+      0.7,  // 右下后方向延迟
+      0.2,  // 左上前方向延迟
+      0.4,  // 左上后方向延迟
+      0.6,  // 左下前方向延迟
+      0.8,  // 左下后方向延迟
+      0.15, // X轴正方向延迟
+      0.25  // X轴负方向延迟
     ];
     
     sceneRef.current.add(cell); // 将细胞添加到场景
@@ -409,8 +608,11 @@ const ResistanceSim3D = ({ onExit }) => {
 
   // 细胞分裂过程
   const divideCellProcess = (parentCell) => {
-    // 如果细胞正在分裂，则不继续
-    if (parentCell.userData.dividing) return; 
+    // 如果细胞正在分裂、死亡或已死亡，则不继续
+    if (parentCell.userData.dividing || parentCell.userData.dying || parentCell.userData.isDead) return;
+    
+    // 如果可见细胞数已达到上限，停止分裂（冻结状态）
+    if (cellsRef.current.length >= MAX_VISIBLE_CELLS) return; 
 
     // 判断是否为初始细胞（位于原点）
     const isInitialCell = parentCell.position.x === 0 && 
@@ -418,8 +620,8 @@ const ResistanceSim3D = ({ onExit }) => {
                          parentCell.position.z === 0;
 
     // 雪花酵母的分裂规则：
-    // 如果是初始细胞且已经分裂了6次，则不再分裂
-    if (isInitialCell && parentCell.userData.divisionCount >= 6) return;
+    // 如果是初始细胞且已经分裂了10次，则不再分裂（修改为10个方向：8个卦限+X轴正负方向）
+    if (isInitialCell && parentCell.userData.divisionCount >= 10) return;
     
     // 如果不是初始细胞且已经分裂过，则不再分裂
     if (!isInitialCell && parentCell.userData.divisionCount >= 1) return;
@@ -428,16 +630,60 @@ const ResistanceSim3D = ({ onExit }) => {
     parentCell.userData.divisionCount++; // 增加分裂次数
 
     // 雪花酵母的子细胞产生逻辑
-    // 初始细胞必定产生一个子细胞，其他细胞有60%概率产生两个子细胞
-    let produceTwoCells = !isInitialCell && Math.random() < 0.6;
+    // 检查是否是已分裂细胞的子细胞
+    const isChildOfDividedCell = parentCell.userData.isChildOfDividedCell;
+    
+    // 初始细胞必定产生一个子细胞
+    // 如果是已分裂细胞的子细胞，则分裂概率降低到30%
+    // 其他细胞有60%概率产生两个子细胞
+    let produceTwoCells;
+    if (isChildOfDividedCell) {
+      produceTwoCells = !isInitialCell && Math.random() < 0.3; // 降低到30%
+    } else {
+      produceTwoCells = !isInitialCell && Math.random() < 0.6;
+    }
     
     // 创建第一个新细胞，传递父细胞的ID
     const newCell1 = createYeastCell(null, environment.oxygen, parentCell.userData.cellId);
+    
+    // 继承抗药质粒
+    newCell1.userData.hasResistancePlasmid = parentCell.userData.hasResistancePlasmid;
+    
+    // 突变机制：继承父细胞的突变状态，并有小概率进一步突变
+    newCell1.userData.mutationLevel = parentCell.userData.mutationLevel; // 首先继承父细胞的突变等级
+    
+    if (Math.random() < 0.005) { // 0.5%概率发生进一步突变
+      newCell1.userData.mutationLevel = Math.min(2, newCell1.userData.mutationLevel + 1);
+    }
+    
+    // 设置突变颜色
+    setMutationColor(newCell1, newCell1.userData.mutationLevel);
+    
+    // 如果父细胞已经产生了两个子细胞，则标记这些子细胞
+    if (produceTwoCells) {
+      newCell1.userData.isChildOfDividedCell = true;
+    }
     
     // 如果需要产生第二个子细胞，则创建
     let newCell2 = null;
     if (produceTwoCells) {
       newCell2 = createYeastCell(null, environment.oxygen, parentCell.userData.cellId);
+      
+      // 继承抗药质粒
+      newCell2.userData.hasResistancePlasmid = parentCell.userData.hasResistancePlasmid;
+      
+      // 突变机制：继承父细胞的突变状态，并有小概率进一步突变
+      newCell2.userData.mutationLevel = parentCell.userData.mutationLevel; // 首先继承父细胞的突变等级
+      
+      if (Math.random() < 0.005) { // 0.5%概率发生进一步突变
+        newCell2.userData.mutationLevel = Math.min(2, newCell2.userData.mutationLevel + 1);
+      }
+      
+      // 设置突变颜色
+      setMutationColor(newCell2, newCell2.userData.mutationLevel);
+      
+      // 标记第二个子细胞
+      newCell2.userData.isChildOfDividedCell = true;
     }
     
     // 添加新细胞到场景 - 确保所有新细胞都被添加到场景中
@@ -449,10 +695,7 @@ const ResistanceSim3D = ({ onExit }) => {
       cellsRef.current.push(newCell2);
     }
     
-    // 在添加新细胞后管理可见细胞数量
-    if (cellsRef.current.length > MAX_VISIBLE_CELLS) {
-      manageVisibleCells();
-    }
+    // 移除自动管理可见细胞数量的逻辑，因为现在通过停止分裂来冻结状态
 
     // 更新总细胞数
     const growthIncrement = calculateGrowthRate() / 100;
@@ -475,11 +718,11 @@ const ResistanceSim3D = ({ onExit }) => {
     const separationDistance = cellLength * 2.3;
     let progress = 0;
     
-    // 根据酵母类型应用不同的分裂方向逻辑
+    // 雪花酵母的分裂方向逻辑
     let directionVector1, directionVector2;
     
     if (isInitialCell) {
-      // 雪花酵母的初始细胞分裂方向逻辑
+      // 初始细胞分裂方向逻辑 - 八卦限方向（立方体8个顶点）
       // 生成随机角度偏移（5-15度之间）
       const randomAngleOffset = (5 + Math.random() * 10) * (Math.PI / 180);
       const randomAxisOffset = new THREE.Vector3(
@@ -488,36 +731,36 @@ const ResistanceSim3D = ({ onExit }) => {
         (Math.random() - 0.5) * 0.3
       ).normalize();
       
+      // 定义10个方向向量：立方体8个顶点（八卦限方向）加上X轴正负方向
+      const snowflakeDirections = [
+        new THREE.Vector3(1, 1, 1),    // 右上前
+        new THREE.Vector3(1, 1, -1),   // 右上后
+        new THREE.Vector3(1, -1, 1),   // 右下前
+        new THREE.Vector3(1, -1, -1),  // 右下后
+        new THREE.Vector3(-1, 1, 1),   // 左上前
+        new THREE.Vector3(-1, 1, -1),  // 左上后
+        new THREE.Vector3(-1, -1, 1),  // 左下前
+        new THREE.Vector3(-1, -1, -1), // 左下后
+        new THREE.Vector3(1, 0, 0),    // X轴正方向
+        new THREE.Vector3(-1, 0, 0)    // X轴负方向
+      ];
+      
+      // 确保所有方向向量都是单位向量
+      snowflakeDirections.forEach(dir => dir.normalize());
+      
       // 根据已分裂的次数决定分裂方向，并添加随机偏移
       let baseDirection;
       const divisionIndex = parentCell.userData.divisionCount - 1; // 索引从0开始
       
-      switch (divisionIndex) {
-        case 0: // 第一次分裂，沿X轴正方向
-          baseDirection = new THREE.Vector3(1, 0, 0);
-          break;
-        case 1: // 第二次分裂，沿X轴负方向
-          baseDirection = new THREE.Vector3(-1, 0, 0);
-          break;
-        case 2: // 第三次分裂，沿Y轴正方向
-          baseDirection = new THREE.Vector3(0, 1, 0);
-          break;
-        case 3: // 第四次分裂，沿Y轴负方向
-          baseDirection = new THREE.Vector3(0, -1, 0);
-          break;
-        case 4: // 第五次分裂，沿Z轴正方向
-          baseDirection = new THREE.Vector3(0, 0, 1);
-          break;
-        case 5: // 第六次分裂，沿Z轴负方向
-          baseDirection = new THREE.Vector3(0, 0, -1);
-          break;
-        default: // 额外的分裂方向
-          baseDirection = new THREE.Vector3(
-            Math.random() - 0.5,
-            Math.random() - 0.5,
-            Math.random() - 0.5
-          ).normalize();
-          break;
+      if (divisionIndex < snowflakeDirections.length) {
+        baseDirection = snowflakeDirections[divisionIndex];
+      } else {
+        // 如果分裂次数超过10次，使用随机方向
+        baseDirection = new THREE.Vector3(
+          Math.random() - 0.5,
+          Math.random() - 0.5,
+          Math.random() - 0.5
+        ).normalize();
       }
       
       // 使用初始细胞中设置的方向延迟时间
@@ -536,10 +779,19 @@ const ResistanceSim3D = ({ onExit }) => {
       directionVector1 = baseDirection.clone().applyQuaternion(rotationQuaternion);
       
       // 根据分裂方向调整分离距离
-      // 长轴方向（X轴正负方向，索引0-1）使用正常分离距离
-      // 非长轴方向（Y和Z轴方向，索引2-5）使用较小的分离距离
-      const isLongAxisDirection = divisionIndex <= 1; // 索引0和1是X轴方向（长轴）
-      newCell1.userData.separationFactor = isLongAxisDirection ? 1.0 : 0.8; // 非长轴方向使用80%的分离距离
+      // 判断是否为八卦限方向（前8个方向）
+      const isOctantDirection = divisionIndex < 8;
+      // 判断是否为X轴方向（后2个方向）
+      const isXAxisDirection = divisionIndex >= 8 && divisionIndex < 10;
+      
+      // 八卦限方向使用80%的分离距离，X轴方向使用正常分离距离
+      if (isOctantDirection) {
+        newCell1.userData.separationFactor = 0.8; // 八卦限方向使用80%的分离距离
+      } else if (isXAxisDirection) {
+        newCell1.userData.separationFactor = 1.0; // X轴方向使用正常分离距离
+      } else {
+        newCell1.userData.separationFactor = 0.9; // 其他方向使用90%的分离距离
+      }
     } else {
       // 非初始细胞的分裂方向逻辑 - 雪花酵母
       // 为雪花酵母的非初始细胞设置分裂方向
@@ -605,13 +857,8 @@ const ResistanceSim3D = ({ onExit }) => {
       newCell2.setRotationFromQuaternion(quaternion2);
     }
 
-    // 如果细胞数量超过限制，则自动暂停
-    if (
-      totalCellCountRef.current >= MAX_TOTAL_CELLS ||
-      cellsRef.current.length >= MAX_VISIBLE_CELLS
-    ) {
-      setIsPaused(true); // 自动暂停
-    }
+    // 如果细胞数量超过限制，不再自动暂停，而是通过manageVisibleCells限制显示数量
+    // 移除自动暂停逻辑，让程序继续运行
 
     // 动画实现细胞分裂过程
     const animate = () => {
@@ -640,14 +887,16 @@ const ResistanceSim3D = ({ onExit }) => {
     };
 
     animate();
-    manageVisibleCells(); // 管理细胞的可见数量
+    // 移除manageVisibleCells调用，因为现在通过停止分裂来冻结状态
   };
 
   // 更新实时统计数据
   const updateStats = () => {
-    const visibleCells = cellsRef.current.length; // 获取当前可见细胞数
-    const avgLength = cellsRef.current.reduce((sum, cell) => 
-      sum + cell.scale.x, 0) / visibleCells; // 计算平均细胞长度
+    // 只统计活着的细胞
+    const aliveCells = cellsRef.current.filter(cell => !cell.userData.isDead && !cell.userData.dying);
+    const visibleCells = aliveCells.length; // 获取当前可见活细胞数
+    const avgLength = visibleCells > 0 ? 
+      aliveCells.reduce((sum, cell) => sum + cell.scale.x, 0) / visibleCells : 0; // 计算平均细胞长度
 
     setStats({
       totalCells: totalCellCountRef.current,
@@ -667,7 +916,58 @@ const ResistanceSim3D = ({ onExit }) => {
     return ((baseRate * (1 + timeMultiplier) * oxygenEffect * temperatureEffect * speedMultiplier) * 100).toFixed(2);
   };
 
-  // 设置模拟运行的定时器
+  // 检查细胞是否应该死亡
+  const checkCellSurvival = (cell) => {
+    // 如果抗生素浓度为无，没有细胞死亡
+    if (antibioticConcentration === 'none') {
+      return true;
+    }
+    
+    const opioidConc = cell.userData.opioidConcentration || 0;
+    const mutationLevel = cell.userData.mutationLevel || 0;
+    
+    if (antibioticConcentration === 'low') {
+      // 低浓度：阿片肽浓度>=20%或mutationLevel>=1的细胞存活
+      return opioidConc >= 0.2 || mutationLevel >= 1;
+    } else if (antibioticConcentration === 'high') {
+      // 高浓度：阿片肽浓度>=30%或mutationLevel=2的细胞存活
+      return opioidConc >= 0.3 || mutationLevel === 2;
+    }
+    
+    return true;
+  };
+  
+  // 处理细胞死亡动画
+  const processCellDeath = (cell) => {
+    if (!cell.userData.dying) {
+      cell.userData.dying = true;
+      cell.userData.deathProgress = 0;
+    }
+    
+    // 逐渐降低亮度
+    cell.userData.deathProgress += 0.02; // 死亡进度
+    const brightness = Math.max(0, 1 - cell.userData.deathProgress);
+    
+    // 更新材质亮度
+    if (cell.material && cell.material.uniforms && cell.material.uniforms.color) {
+      const currentColor = cell.material.uniforms.color.value;
+      cell.material.uniforms.color.value.setRGB(
+        currentColor.r * brightness,
+        currentColor.g * brightness, 
+        currentColor.b * brightness
+      );
+    }
+    
+    // 当完全变暗时，标记为死亡
+    if (cell.userData.deathProgress >= 1) {
+      cell.userData.isDead = true;
+      return true; // 返回true表示细胞已完全死亡
+    }
+    
+    return false;
+  };
+
+  // 设置细胞生长和分裂的定时器（独立于阿片肽功能）
   useEffect(() => {
     let interval;
     if (!isPaused) {
@@ -676,19 +976,48 @@ const ResistanceSim3D = ({ onExit }) => {
       interval = setInterval(() => {
         setTimeStep(prev => prev + 1); // 更新时间步长
         
-        // 更新所有细胞状态
+        // 检查细胞存活状态并处理死亡
+        const cellsToRemove = [];
+        cellsRef.current.forEach((cell, index) => {
+          if (!cell.userData.isDead && !cell.userData.dying) {
+            // 检查细胞是否应该死亡
+            if (!checkCellSurvival(cell)) {
+              // 开始死亡过程
+              processCellDeath(cell);
+            }
+          } else if (cell.userData.dying) {
+            // 继续死亡过程
+            const fullyDead = processCellDeath(cell);
+            if (fullyDead) {
+              cellsToRemove.push(index);
+            }
+          }
+        });
+        
+        // 移除完全死亡的细胞
+        cellsToRemove.reverse().forEach(index => {
+          const cell = cellsRef.current[index];
+          sceneRef.current.remove(cell);
+          cellsRef.current.splice(index, 1);
+        });
+        
+        // 更新所有细胞状态（仅细胞生长和分裂相关）
         cellsRef.current.forEach(cell => {
-          if (!cell.userData.dividing) {
+          if (!cell.userData.isDead && !cell.userData.dying && !cell.userData.dividing) {
             const growthRate = (calculateGrowthRate() / 2000) * cell.userData.growthRateModifier;
             cell.userData.growthStage += growthRate;
-            
-            // 更新细胞形状
-            const targetLength = calculateCellLength(environment.oxygen);
-            cell.scale.x += (targetLength - cell.scale.x) * 0.1;
             
             if (cell.userData.growthStage >= (1 + cell.userData.divisionDelay)) {
               divideCellProcess(cell);
             }
+          }
+        });
+        
+        // 更新细胞形状（根据氧气浓度调整）
+        cellsRef.current.forEach(cell => {
+          if (!cell.userData.isDead && !cell.userData.dying) {
+            const targetLength = calculateCellLength(environment.oxygen);
+            cell.scale.x += (targetLength - cell.scale.x) * 0.1;
           }
         });
 
@@ -696,8 +1025,66 @@ const ResistanceSim3D = ({ onExit }) => {
       }, intervalTime);
     }
     return () => clearInterval(interval);
-  }, [isPaused, speedMultiplier]); // 移除environment依赖项，因为它现在是常量
+  }, [isPaused, speedMultiplier, antibioticConcentration]);
 
+  // 独立的阿片肽浓度更新定时器（不受isPaused影响）
+  useEffect(() => {
+    let opioidInterval;
+    if (opioidSecreting) {
+      opioidInterval = setInterval(() => {
+        // 更新独立的阿片肽时间
+        opioidTimeRef.current += 0.1; // 每50ms增加0.1时间单位
+        
+        // 更新所有细胞的阿片肽浓度
+        cellsRef.current.forEach(cell => {
+          const newOpioidConcentration = calculateOpioidConcentration(cell.position);
+          cell.userData.opioidConcentration = newOpioidConcentration;
+          
+          // 更新shader中的阿片肽浓度uniform
+          if (cell.material && cell.material.uniforms && cell.material.uniforms.opioidConcentration) {
+            cell.material.uniforms.opioidConcentration.value = newOpioidConcentration;
+          }
+        });
+      }, 50); // 固定50ms间隔更新阿片肽浓度
+    }
+    return () => clearInterval(opioidInterval);
+  }, [opioidSecreting]); // 只依赖于opioidSecreting状态
+
+  // 移除自动恢复监控定时器，因为不再需要自动暂停和恢复功能
+
+  // 开始分泌阿片肽
+  const startOpioidSecretion = () => {
+    if (!opioidSecreting) {
+      setOpioidSecreting(true);
+      setOpioidStartTime(timeStep);
+      opioidTimeRef.current = 0; // 重置独立的阿片肽时间
+      createOpioidVisualization();
+      
+      // 立即更新所有细胞的阿片肽浓度
+      cellsRef.current.forEach(cell => {
+        const newOpioidConcentration = calculateOpioidConcentration(cell.position);
+        cell.userData.opioidConcentration = newOpioidConcentration;
+        
+        // 更新shader中的阿片肽浓度uniform
+        if (cell.material && cell.material.uniforms && cell.material.uniforms.opioidConcentration) {
+          cell.material.uniforms.opioidConcentration.value = newOpioidConcentration;
+        }
+      });
+    }
+  };
+  
+  // 添加抗生素
+  const addAntibiotic = (concentration) => {
+    // 只能从无到低，从低到高，不能降级
+    if (concentration === 'low' && antibioticConcentration === 'none') {
+      setAntibioticConcentration('low');
+      setAntibioticStartTime(timeStep);
+    } else if (concentration === 'high' && (antibioticConcentration === 'none' || antibioticConcentration === 'low')) {
+      setAntibioticConcentration('high');
+      setAntibioticStartTime(timeStep);
+    }
+  };
+  
   // 重置模拟
   const handleReset = () => {
     cellsRef.current.forEach(cell => {
@@ -707,10 +1094,24 @@ const ResistanceSim3D = ({ onExit }) => {
     totalCellCountRef.current = 1; // 重置总细胞数
     cellIdCounterRef.current = 1; // 重置细胞ID计数器
     setSelectedCell(null); // 清除选中的细胞
+    
+    // 清除阿片肽扩散场
+    if (opioidFieldRef.current) {
+      sceneRef.current.remove(opioidFieldRef.current);
+      opioidFieldRef.current = null;
+    }
+    
+    // 重置抗药性相关状态
+    setOpioidSecreting(false);
+    setAntibioticConcentration('none');
+    setOpioidStartTime(0);
+    setAntibioticStartTime(0);
+    opioidTimeRef.current = 0; // 重置独立的阿片肽时间
+    
     addInitialCell(); // 添加初始细胞
     setTimeStep(0); // 重置时间步长
     setIsPaused(true); // 设置暂停状态
-    // 注意：不重置yeastType，保持当前选择的酵母类型
+    // 重置完成
   };
 
   // 重置相机视角
@@ -755,7 +1156,28 @@ const ResistanceSim3D = ({ onExit }) => {
             >
               重置视角
             </Button>
-            {/* 移除酵母类型选择器，只使用雪花酵母 */}
+            <Button 
+              onClick={startOpioidSecretion}
+              disabled={opioidSecreting}
+              className="w-32"
+            >
+              {opioidSecreting ? '已分泌阿片肽' : '分泌阿片肽'}
+            </Button>
+            <Button 
+              onClick={() => addAntibiotic('low')}
+              disabled={antibioticConcentration === 'high'}
+              className="w-32"
+            >
+              {antibioticConcentration === 'none' ? '低浓度抗生素' : '已添加低浓度'}
+            </Button>
+            <Button 
+              onClick={() => addAntibiotic('high')}
+              disabled={antibioticConcentration === 'high'}
+              className="w-32"
+            >
+              {antibioticConcentration === 'high' ? '已添加高浓度' : '高浓度抗生素'}
+            </Button>
+
           </div>
           
           <div className="mb-4">
@@ -785,6 +1207,17 @@ const ResistanceSim3D = ({ onExit }) => {
               className="rounded-lg"
               style={{ width: '800px', height: '500px' }}
             />
+            {/* 抗生素浓度显示 */}
+            <div 
+              className="absolute bg-blue-600 bg-opacity-80 text-white px-3 py-2 rounded-md text-sm font-semibold"
+              style={{
+                top: '10px',
+                right: '10px',
+                zIndex: 15
+              }}
+            >
+              抗生素浓度：{antibioticConcentration === 'none' ? '无' : antibioticConcentration === 'low' ? '低' : '高'}
+            </div>
             {selectedCell && (
               <div 
                 className="absolute bg-black bg-opacity-70 text-white px-2 py-1 rounded-md text-sm"
@@ -795,7 +1228,8 @@ const ResistanceSim3D = ({ onExit }) => {
                   zIndex: 10
                 }}
               >
-                第{selectedCell.id}代
+                <div>第{selectedCell.id}代</div>
+                <div>阿片肽浓度: {(selectedCell.opioidConcentration * 100).toFixed(1)}%</div>
               </div>
             )}
           </div>
@@ -803,8 +1237,34 @@ const ResistanceSim3D = ({ onExit }) => {
           <div className="p-4 bg-white rounded-lg shadow" style={{ width: '800px' }}>
             <div className="grid grid-cols-2 gap-4">
               <div className="text-sm space-y-2">
-                <div className="font-bold mb-2">待输入</div>
+                <div className="font-bold mb-2">实时统计</div>
+                <div>总细胞数: {stats.totalCells.toLocaleString()}</div>
+                <div>可见细胞数: {stats.visibleCells}</div>
+                <div>平均细胞长度: {stats.avgLength}</div>
+                <div>生长速率: {stats.growthRate}%</div>
+                <div>模拟时间: {minutes}分{seconds}秒</div>
               </div>
+              <div className="text-sm space-y-2">
+                <div className="font-bold mb-2">抗药性状态</div>
+                <div>阿片肽分泌: {opioidSecreting ? '是' : '否'}</div>
+                <div>抗生素浓度: {antibioticConcentration === 'none' ? '无' : antibioticConcentration === 'low' ? '低' : '高'}</div>
+                <div>氧气浓度: {environment.oxygen}%</div>
+                <div>温度: {environment.temperature}°C</div>
+                <div>酵母类型: 雪花酵母</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 bg-gray-100 rounded-lg shadow" style={{ width: '800px' }}>
+            <div className="font-bold mb-2">模拟说明</div>
+            <div className="text-sm space-y-2">
+              <div><strong>1. 初始状态：</strong>祖细胞（白色）具有抗药质粒，位于中心位置</div>
+              <div><strong>2. 阿片肽分泌：</strong>点击"分泌阿片肽"按钮，祖细胞开始分泌阿片肽（蓝色扩散场）（这个场的渲染调了好久，暂时还没弄好）</div>
+              <div><strong>3. 基因激活：</strong>接收阿片肽的细胞激活抗药基因表达（绿色表示表达强度）</div>
+              <div><strong>4. 抗生素压力：</strong>点击"添加抗生素"按钮，对所有细胞施加选择压力</div>
+              <div><strong>5. 细胞死亡：</strong>无抗药性的细胞死亡（变为灰色，之后消失）</div>
+              <div><strong>6. 突变进化：</strong>存活细胞可能发生突变（红色），获得更强抗药性（红色越深抗药性越强）</div>
+              <div><strong>7. 细胞簇形成：</strong>最终形成抗药性强的细胞簇</div>
             </div>
           </div>
 
