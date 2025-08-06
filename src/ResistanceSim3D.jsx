@@ -11,7 +11,7 @@ const ResistanceSim3D = ({ onExit }) => {
   const [isPaused, setIsPaused] = useState(true); // 模拟是否暂停
   const [timeStep, setTimeStep] = useState(0); // 时间步长，控制生长速率
   const [speedMultiplier, setSpeedMultiplier] = useState(1); // 速度倍率，控制模拟速度
-  // 使用雪花酵母类型
+  // 使用葡萄酵母类型
   const [stats, setStats] = useState({ // 存储实时统计数据
     totalCells: 1, // 总细胞数
     visibleCells: 0, // 可见细胞数
@@ -49,9 +49,9 @@ const ResistanceSim3D = ({ onExit }) => {
   const MAX_TOTAL_CELLS = 999999999; // 最大总细胞数
   const MAX_LENGTH_RATIO = 1.8; // 最大细胞长度比例
 
-  // 计算细胞的长度，根据氧气浓度调整（仅雪花酵母）
+  // 计算细胞的长度，根据氧气浓度调整（仅葡萄酵母）
   const calculateCellLength = (oxygen) => {
-    // 雪花酵母根据氧气浓度调整形状
+    // 葡萄酵母根据氧气浓度调整形状
     if (oxygen >= 20) {
       return 1.0;  // 需氧条件：完全圆形
     } else {
@@ -411,13 +411,13 @@ const ResistanceSim3D = ({ onExit }) => {
     const length = calculateCellLength(oxygen); // 计算细胞长度
     const geometry = new THREE.SphereGeometry(1, 32, 32);
     
-    // 雪花酵母 - 椭圆形，白色
+    // 葡萄酵母 - 椭圆形，白色
     geometry.scale(length, 1, 1); // 调整几何体比例为椭圆形
     
     // 创建自定义着色器材质来实现渐变发光效果
-    // 雪花酵母设置为白色，但会根据阿片肽浓度变绿
-    const cellColor = new THREE.Color(0xFFFFFF); // 雪花酵母为白色
-    const cellGlowColor = new THREE.Color(0xCCCCCC); // 雪花酵母为白色光晕
+    // 葡萄酵母设置为白色，但会根据阿片肽浓度变绿
+    const cellColor = new THREE.Color(0xFFFFFF); // 葡萄酵母为白色
+    const cellGlowColor = new THREE.Color(0xCCCCCC); // 葡萄酵母为白色光晕
     
     const customMaterial = new THREE.ShaderMaterial({
       uniforms: {
@@ -464,9 +464,9 @@ const ResistanceSim3D = ({ onExit }) => {
     cell.castShadow = true;
     cell.receiveShadow = true;
 
-    // 创建细胞核 - 雪花酵母的细胞核为灰色
+    // 创建细胞核 - 葡萄酵母的细胞核为灰色
     const nucleusGeometry = new THREE.SphereGeometry(0.3, 16, 16);
-    const nucleusColor = 0x888888; // 雪花酵母为灰色
+    const nucleusColor = 0x888888; // 葡萄酵母为灰色
     const nucleusMaterial = new THREE.MeshPhongMaterial({
       color: nucleusColor,
       emissive: nucleusColor,
@@ -476,7 +476,7 @@ const ResistanceSim3D = ({ onExit }) => {
     });
     const nucleus = new THREE.Mesh(nucleusGeometry, nucleusMaterial);
     
-    // 雪花酵母的细胞核位于细胞中心
+    // 葡萄酵母的细胞核位于细胞中心
     nucleus.position.set(0, 0, 0); // 设置在细胞中心
     
     cell.add(nucleus); // 将细胞核添加为细胞的子对象
@@ -540,9 +540,9 @@ const ResistanceSim3D = ({ onExit }) => {
     cell.userData.cellId = 1; // 初始细胞编号为1
     cell.userData.hasResistancePlasmid = true; // 祖细胞具有抗药质粒
     
-    // 设置雪花酵母的初始属性
+    // 设置葡萄酵母的初始属性
     cell.userData.divisionDelay = 0.1; // 减少初始细胞的分裂延迟
-    // 为雪花酵母设置十个方向的分裂延迟时间，对应立方体的八个顶点加上X轴正负方向
+    // 为葡萄酵母设置十个方向的分裂延迟时间，对应立方体的八个顶点加上X轴正负方向
     cell.userData.directionDelays = [
       0.1,  // 右上前方向延迟
       0.3,  // 右上后方向延迟
@@ -619,7 +619,7 @@ const ResistanceSim3D = ({ onExit }) => {
                          parentCell.position.y === 0 && 
                          parentCell.position.z === 0;
 
-    // 雪花酵母的分裂规则：
+    // 葡萄酵母的分裂规则：
     // 如果是初始细胞且已经分裂了10次，则不再分裂（修改为10个方向：8个卦限+X轴正负方向）
     if (isInitialCell && parentCell.userData.divisionCount >= 10) return;
     
@@ -629,7 +629,7 @@ const ResistanceSim3D = ({ onExit }) => {
     parentCell.userData.dividing = true; // 设置为正在分裂
     parentCell.userData.divisionCount++; // 增加分裂次数
 
-    // 雪花酵母的子细胞产生逻辑
+    // 葡萄酵母的子细胞产生逻辑
     // 检查是否是已分裂细胞的子细胞
     const isChildOfDividedCell = parentCell.userData.isChildOfDividedCell;
     
@@ -718,7 +718,7 @@ const ResistanceSim3D = ({ onExit }) => {
     const separationDistance = cellLength * 2.3;
     let progress = 0;
     
-    // 雪花酵母的分裂方向逻辑
+    // 葡萄酵母的分裂方向逻辑
     let directionVector1, directionVector2;
     
     if (isInitialCell) {
@@ -793,8 +793,8 @@ const ResistanceSim3D = ({ onExit }) => {
         newCell1.userData.separationFactor = 0.9; // 其他方向使用90%的分离距离
       }
     } else {
-      // 非初始细胞的分裂方向逻辑 - 雪花酵母
-      // 为雪花酵母的非初始细胞设置分裂方向
+      // 非初始细胞的分裂方向逻辑 - 葡萄酵母
+      // 为葡萄酵母的非初始细胞设置分裂方向
       const maxAngle = 15 * (Math.PI / 180);
       const randomAngle = Math.acos(Math.pow(Math.random(), 1/3)) * maxAngle;
       const randomDirection = Math.random() * Math.PI * 2;
@@ -1250,7 +1250,7 @@ const ResistanceSim3D = ({ onExit }) => {
                 <div>抗生素浓度: {antibioticConcentration === 'none' ? '无' : antibioticConcentration === 'low' ? '低' : '高'}</div>
                 <div>氧气浓度: {environment.oxygen}%</div>
                 <div>温度: {environment.temperature}°C</div>
-                <div>酵母类型: 雪花酵母</div>
+                <div>酵母类型: 葡萄酵母</div>
               </div>
             </div>
           </div>

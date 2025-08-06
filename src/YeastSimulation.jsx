@@ -13,7 +13,7 @@ function YeastSimulation() {
   const [isPaused, setIsPaused] = useState(true); // 模拟是否暂停
   const [timeStep, setTimeStep] = useState(0); // 时间步长，控制生长速率
   const [speedMultiplier, setSpeedMultiplier] = useState(1); // 速度倍率，控制模拟速度
-  const [yeastType, setYeastType] = useState('snowflake'); // 酵母类型：烟花酵母(snowflake)或普通酵母(normal)
+  const [yeastType, setYeastType] = useState('snowflake'); // 酵母类型：葡萄酵母(snowflake)或普通酵母(normal)
   const [stats, setStats] = useState({ // 存储实时统计数据
     totalCells: 1, // 总细胞数
     visibleCells: 0, // 可见细胞数
@@ -47,7 +47,7 @@ function YeastSimulation() {
     if (yeastType === 'normal') {
       return 1.0;  // 普通酵母：始终保持初始形状
     } else {
-      // 雪花酵母根据氧气浓度调整形状
+      // 葡萄酵母根据氧气浓度调整形状
       if (oxygen >= 20) {
         return 1.0;  // 需氧条件：完全圆形
       } else {
@@ -290,14 +290,14 @@ function YeastSimulation() {
     const geometry = new THREE.SphereGeometry(1, 32, 32);
     
     // 根据酵母类型设置不同的参数
-    // 雪花酵母 - 椭圆形，蓝绿色
+    // 葡萄酵母 - 椭圆形，蓝绿色
     // 普通酵母 - 椭圆形，浅绿色
     geometry.scale(length, 1, 1); // 调整几何体比例为椭圆形
     
     // 创建自定义着色器材质来实现渐变发光效果
     // 根据酵母类型设置不同的颜色
-    const cellColor = yeastType === 'normal' ? new THREE.Color(0x90EE90) : new THREE.Color(0x00FFFF); // 普通酵母为浅绿色，烟花酵母为蓝绿色
-    const cellGlowColor = yeastType === 'normal' ? new THREE.Color(0x98FB98) : new THREE.Color(0x40E0D0); // 普通酵母为浅绿色光晕，烟花酵母为蓝绿色光晕
+    const cellColor = yeastType === 'normal' ? new THREE.Color(0x90EE90) : new THREE.Color(0x00FFFF); // 普通酵母为浅绿色，葡萄酵母为蓝绿色
+      const cellGlowColor = yeastType === 'normal' ? new THREE.Color(0x98FB98) : new THREE.Color(0x40E0D0); // 普通酵母为浅绿色光晕，葡萄酵母为蓝绿色光晕
     
     const customMaterial = new THREE.ShaderMaterial({
       uniforms: {
@@ -338,8 +338,8 @@ function YeastSimulation() {
 
     // 创建细胞核 - 根据酵母类型调整颜色
     const nucleusGeometry = new THREE.SphereGeometry(0.3, 16, 16);
-    // 统一使用烟花酵母的细胞核颜色 - 橙黄色
-    const nucleusColor = 0xFFA500; // 烟花酵母为橙黄色
+    // 统一使用葡萄酵母的细胞核颜色 - 橙黄色
+      const nucleusColor = 0xFFA500; // 葡萄酵母为橙黄色
     const nucleusMaterial = new THREE.MeshPhongMaterial({
       color: nucleusColor,
       emissive: nucleusColor,
@@ -349,8 +349,8 @@ function YeastSimulation() {
     });
     const nucleus = new THREE.Mesh(nucleusGeometry, nucleusMaterial);
     
-    // 统一使用烟花酵母的细胞核位置
-    // 烟花酵母的细胞核位于细胞中心
+    // 统一使用葡萄酵母的细胞核位置
+      // 葡萄酵母的细胞核位于细胞中心
     nucleus.position.set(0, 0, 0); // 设置在细胞中心
     
     cell.add(nucleus); // 将细胞核添加为细胞的子对象
@@ -394,9 +394,9 @@ function YeastSimulation() {
     
     // 根据酵母类型设置不同的初始属性
     if (yeastType === 'snowflake') {
-      // 雪花酵母的初始属性
+      // 葡萄酵母的初始属性
       cell.userData.divisionDelay = 0.1; // 减少初始细胞的分裂延迟
-      // 为雪花酵母设置十个方向的分裂延迟时间，对应立方体的八个顶点加上X轴正负方向
+      // 为葡萄酵母设置十个方向的分裂延迟时间，对应立方体的八个顶点加上X轴正负方向
       cell.userData.directionDelays = [
         0.1,  // 右上前方向延迟
         0.3,  // 右上后方向延迟
@@ -487,7 +487,7 @@ function YeastSimulation() {
 
     // 根据酵母类型应用不同的分裂规则
     if (yeastType === 'snowflake') {
-      // 雪花酵母的分裂规则：
+      // 葡萄酵母的分裂规则：
       // 如果是初始细胞且已经分裂了10次，则不再分裂（修改为10个方向：8个卦限+X轴正负方向）
       if (isInitialCell && parentCell.userData.divisionCount >= 10) return;
       
@@ -511,7 +511,7 @@ function YeastSimulation() {
     const isChildOfDividedCell = parentCell.userData.isChildOfDividedCell;
     
     if (yeastType === 'snowflake') {
-      // 雪花酵母：初始细胞必定产生一个子细胞
+      // 葡萄酵母：初始细胞必定产生一个子细胞
       // 如果是已分裂细胞的子细胞，则分裂概率降低到30%（原来60%的50%）
       // 其他细胞有60%概率产生两个子细胞
       if (isChildOfDividedCell) {
@@ -586,7 +586,7 @@ function YeastSimulation() {
     
     if (isInitialCell) {
       if (yeastType === 'snowflake') {
-        // 雪花酵母的初始细胞分裂方向逻辑 - 修改为八卦限方向（立方体8个顶点）
+        // 葡萄酵母的初始细胞分裂方向逻辑 - 修改为八卦限方向（立方体8个顶点）
         // 生成随机角度偏移（5-15度之间）
         const randomAngleOffset = (5 + Math.random() * 10) * (Math.PI / 180);
         const randomAxisOffset = new THREE.Vector3(
@@ -712,7 +712,7 @@ function YeastSimulation() {
     } else {
       // 非初始细胞的分裂方向逻辑
       if (yeastType === 'snowflake') {
-        // 为雪花酵母的非初始细胞设置分裂方向
+        // 为葡萄酵母的非初始细胞设置分裂方向
         const maxAngle = 15 * (Math.PI / 180);
         const randomAngle = Math.acos(Math.pow(Math.random(), 1/3)) * maxAngle;
         const randomDirection = Math.random() * Math.PI * 2;
@@ -973,7 +973,7 @@ function YeastSimulation() {
                 <SelectValue placeholder="选择酵母类型" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="snowflake">烟花酵母</SelectItem>
+                <SelectItem value="snowflake">葡萄酵母</SelectItem>
                 <SelectItem value="normal">普通酵母</SelectItem>
               </SelectContent>
             </Select>
@@ -1028,7 +1028,7 @@ function YeastSimulation() {
               <div className="text-sm space-y-2">
                 <div className="font-bold mb-2">实时统计数据:</div>
                 <div>当前酵母类型: <span className={yeastType === 'snowflake' ? "text-cyan-600" : "text-amber-600"}>
-                  {yeastType === 'snowflake' ? '烟花酵母' : '普通酵母'}
+                  {yeastType === 'snowflake' ? '葡萄酵母' : '普通酵母'}
                 </span></div>
                 <div>实际总细胞数: {stats.totalCells.toLocaleString()}</div>
                 <div>可见细胞数: {stats.visibleCells}</div>
@@ -1043,7 +1043,7 @@ function YeastSimulation() {
                 <div>温度: 30℃ (最适生长温度)</div>
                 <div className={yeastType === 'snowflake' ? "text-cyan-600" : "text-amber-600"}>
                   {yeastType === 'snowflake' 
-                    ? '烟花酵母: 沿六个固定方向分裂，形成烟花状结构' 
+                    ? '葡萄酵母: 沿六个固定方向分裂，形成烟花状结构' 
                     : '普通酵母: 多次分裂，形成自然的酵母菌落'}
                 </div>
               </div>
