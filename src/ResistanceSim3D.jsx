@@ -21,13 +21,13 @@ const ResistanceSim3D = ({ onExit }) => {
   const [selectedCell, setSelectedCell] = useState(null); // 存储被选中的细胞信息
   
   // 抗药性模拟相关状态
-  const [opioidSecreting, setOpioidSecreting] = useState(false); // 阿片肽分泌状态
+  const [opioidSecreting, setOpioidSecreting] = useState(false); // 诱导物质分泌状态
   const [antibioticConcentration, setAntibioticConcentration] = useState('none'); // 抗生素浓度：'none', 'low', 'high'
-  const [opioidStartTime, setOpioidStartTime] = useState(0); // 阿片肽开始分泌时间
+  const [opioidStartTime, setOpioidStartTime] = useState(0); // 诱导物质开始分泌时间
   const [antibioticStartTime, setAntibioticStartTime] = useState(0); // 抗生素开始添加时间
-  const opioidFieldRef = useRef(null); // 阿片肽浓度场的引用
+  const opioidFieldRef = useRef(null); // 诱导物质浓度场的引用
   const antibioticFieldRef = useRef(null); // 抗生素浓度场的引用
-  const opioidTimeRef = useRef(0); // 独立的阿片肽时间追踪
+  const opioidTimeRef = useRef(0); // 独立的诱导物质时间追踪
   // 固定环境条件：氧气浓度10%、温度30℃
   const environment = {
     oxygen: 10,
@@ -76,7 +76,7 @@ const ResistanceSim3D = ({ onExit }) => {
   
 
   // 处理鼠标点击事件，显示细胞编号
-  // 计算指定位置的阿片肽浓度
+  // 计算指定位置的诱导物质浓度
   const calculateOpioidConcentration = (position) => {
     if (!opioidSecreting) {
       return 0;
@@ -137,7 +137,7 @@ const ResistanceSim3D = ({ onExit }) => {
     if (intersects.length > 0) {
       // 获取第一个相交的细胞
       const selectedCell = intersects[0].object;
-      // 使用细胞已存储的阿片肽浓度，而不是重新计算
+      // 使用细胞已存储的诱导物质浓度，而不是重新计算
       const opioidConcentration = selectedCell.userData.opioidConcentration || 0;
       
       // 记录鼠标点击的实际位置，用于显示标签
@@ -156,13 +156,13 @@ const ResistanceSim3D = ({ onExit }) => {
     }
   };
 
-  // 创建阿片肽扩散可视化（3D球形扩散）
+  // 创建诱导物质扩散可视化（3D球形扩散）
   const createOpioidVisualization = () => {
     if (opioidFieldRef.current) {
       sceneRef.current.remove(opioidFieldRef.current);
     }
     
-    // 创建一个平面来显示阿片肽扩散场，始终面向相机
+    // 创建一个平面来显示诱导物质扩散场，始终面向相机
     const geometry = new THREE.PlaneGeometry(60, 60, 64, 64);
     const material = new THREE.ShaderMaterial({
       uniforms: {
@@ -247,7 +247,7 @@ const ResistanceSim3D = ({ onExit }) => {
     sceneRef.current.add(opioidField);
   };
   
-  // 更新阿片肽可视化（平面扩散）
+  // 更新诱导物质可视化（平面扩散）
   const updateOpioidVisualization = () => {
     if (opioidFieldRef.current && opioidSecreting) {
       const timeSinceStart = opioidTimeRef.current;
@@ -374,7 +374,7 @@ const ResistanceSim3D = ({ onExit }) => {
     const animate = () => {
       requestAnimationFrame(animate);
 
-      // 更新阿片肽可视化（独立于细胞生长）
+      // 更新诱导物质可视化（独立于细胞生长）
       updateOpioidVisualization();
       
       // 确保扩散平面始终面向相机
@@ -415,7 +415,7 @@ const ResistanceSim3D = ({ onExit }) => {
     geometry.scale(length, 1, 1); // 调整几何体比例为椭圆形
     
     // 创建自定义着色器材质来实现渐变发光效果
-    // 葡萄酵母设置为白色，但会根据阿片肽浓度变绿
+    // 葡萄酵母设置为白色，但会根据诱导物质浓度变绿
     const cellColor = new THREE.Color(0xFFFFFF); // 葡萄酵母为白色
     const cellGlowColor = new THREE.Color(0xCCCCCC); // 葡萄酵母为白色光晕
     
@@ -423,7 +423,7 @@ const ResistanceSim3D = ({ onExit }) => {
       uniforms: {
         color: { value: cellColor },
         glowColor: { value: cellGlowColor },
-        opioidConcentration: { value: 0.0 } // 阿片肽浓度uniform
+        opioidConcentration: { value: 0.0 } // 诱导物质浓度uniform
       },
       vertexShader: `
         varying vec3 vNormal;
@@ -445,7 +445,7 @@ const ResistanceSim3D = ({ onExit }) => {
           float edge = smoothstep(0.2, 1.0, abs(vPosition.x));
           float centerDim = smoothstep(0.0, 0.5, abs(vPosition.x));
           
-          // 根据阿片肽浓度混合绿色
+          // 根据诱导物质浓度混合绿色
           vec3 greenColor = vec3(0.2, 1.0, 0.3); // 亮绿色
           vec3 baseColor = mix(color, greenColor, opioidConcentration);
           vec3 baseGlowColor = mix(glowColor, greenColor * 0.8, opioidConcentration);
@@ -492,7 +492,7 @@ const ResistanceSim3D = ({ onExit }) => {
       );
     }
 
-    // 计算初始阿片肽浓度
+    // 计算初始诱导物质浓度
     const initialOpioidConcentration = calculateOpioidConcentration(position || new THREE.Vector3(0, 0, 0));
     
     // 设置细胞的用户数据
@@ -509,7 +509,7 @@ const ResistanceSim3D = ({ onExit }) => {
       cellId: parentCellId ? parentCellId + 1 : cellIdCounterRef.current, // 细胞编号
       // 抗药性相关属性
       hasResistancePlasmid: false, // 是否具有抗药质粒
-      opioidConcentration: initialOpioidConcentration, // 当前阿片肽浓度
+      opioidConcentration: initialOpioidConcentration, // 当前诱导物质浓度
       resistanceGeneExpression: 0, // 抗药基因表达强度
       antibioticConcentration: 0, // 当前抗生素浓度
       survivalProbability: 1.0, // 存活概率
@@ -519,7 +519,7 @@ const ResistanceSim3D = ({ onExit }) => {
       mutationLevel: 0 // 突变水平（0-正常，1-轻度突变，2-重度突变）
     };
     
-    // 初始化shader中的阿片肽浓度uniform
+    // 初始化shader中的诱导物质浓度uniform
     if (customMaterial.uniforms && customMaterial.uniforms.opioidConcentration) {
       customMaterial.uniforms.opioidConcentration.value = initialOpioidConcentration;
     }
@@ -927,10 +927,10 @@ const ResistanceSim3D = ({ onExit }) => {
     const mutationLevel = cell.userData.mutationLevel || 0;
     
     if (antibioticConcentration === 'low') {
-      // 低浓度：阿片肽浓度>=20%或mutationLevel>=1的细胞存活
+      // 低浓度：诱导物质浓度>=20%或mutationLevel>=1的细胞存活
       return opioidConc >= 0.2 || mutationLevel >= 1;
     } else if (antibioticConcentration === 'high') {
-      // 高浓度：阿片肽浓度>=30%或mutationLevel=2的细胞存活
+      // 高浓度：诱导物质浓度>=30%或mutationLevel=2的细胞存活
       return opioidConc >= 0.3 || mutationLevel === 2;
     }
     
@@ -967,7 +967,7 @@ const ResistanceSim3D = ({ onExit }) => {
     return false;
   };
 
-  // 设置细胞生长和分裂的定时器（独立于阿片肽功能）
+  // 设置细胞生长和分裂的定时器（独立于诱导物质功能）
   useEffect(() => {
     let interval;
     if (!isPaused) {
@@ -1027,45 +1027,45 @@ const ResistanceSim3D = ({ onExit }) => {
     return () => clearInterval(interval);
   }, [isPaused, speedMultiplier, antibioticConcentration]);
 
-  // 独立的阿片肽浓度更新定时器（不受isPaused影响）
+  // 独立的诱导物质浓度更新定时器（不受isPaused影响）
   useEffect(() => {
     let opioidInterval;
     if (opioidSecreting) {
       opioidInterval = setInterval(() => {
-        // 更新独立的阿片肽时间
+        // 更新独立的诱导物质时间
         opioidTimeRef.current += 0.1; // 每50ms增加0.1时间单位
         
-        // 更新所有细胞的阿片肽浓度
+        // 更新所有细胞的诱导物质浓度
         cellsRef.current.forEach(cell => {
           const newOpioidConcentration = calculateOpioidConcentration(cell.position);
           cell.userData.opioidConcentration = newOpioidConcentration;
           
-          // 更新shader中的阿片肽浓度uniform
+          // 更新shader中的诱导物质浓度uniform
           if (cell.material && cell.material.uniforms && cell.material.uniforms.opioidConcentration) {
             cell.material.uniforms.opioidConcentration.value = newOpioidConcentration;
           }
         });
-      }, 50); // 固定50ms间隔更新阿片肽浓度
+      }, 50); // 固定50ms间隔更新诱导物质浓度
     }
     return () => clearInterval(opioidInterval);
   }, [opioidSecreting]); // 只依赖于opioidSecreting状态
 
   // 移除自动恢复监控定时器，因为不再需要自动暂停和恢复功能
 
-  // 开始分泌阿片肽
+  // 开始分泌诱导物质
   const startOpioidSecretion = () => {
     if (!opioidSecreting) {
       setOpioidSecreting(true);
       setOpioidStartTime(timeStep);
-      opioidTimeRef.current = 0; // 重置独立的阿片肽时间
+      opioidTimeRef.current = 0; // 重置独立的诱导物质时间
       createOpioidVisualization();
       
-      // 立即更新所有细胞的阿片肽浓度
+      // 立即更新所有细胞的诱导物质浓度
       cellsRef.current.forEach(cell => {
         const newOpioidConcentration = calculateOpioidConcentration(cell.position);
         cell.userData.opioidConcentration = newOpioidConcentration;
         
-        // 更新shader中的阿片肽浓度uniform
+        // 更新shader中的诱导物质浓度uniform
         if (cell.material && cell.material.uniforms && cell.material.uniforms.opioidConcentration) {
           cell.material.uniforms.opioidConcentration.value = newOpioidConcentration;
         }
@@ -1095,7 +1095,7 @@ const ResistanceSim3D = ({ onExit }) => {
     cellIdCounterRef.current = 1; // 重置细胞ID计数器
     setSelectedCell(null); // 清除选中的细胞
     
-    // 清除阿片肽扩散场
+    // 清除诱导物质扩散场
     if (opioidFieldRef.current) {
       sceneRef.current.remove(opioidFieldRef.current);
       opioidFieldRef.current = null;
@@ -1106,7 +1106,7 @@ const ResistanceSim3D = ({ onExit }) => {
     setAntibioticConcentration('none');
     setOpioidStartTime(0);
     setAntibioticStartTime(0);
-    opioidTimeRef.current = 0; // 重置独立的阿片肽时间
+    opioidTimeRef.current = 0; // 重置独立的诱导物质时间
     
     addInitialCell(); // 添加初始细胞
     setTimeStep(0); // 重置时间步长
@@ -1161,7 +1161,7 @@ const ResistanceSim3D = ({ onExit }) => {
               disabled={opioidSecreting}
               className="w-32"
             >
-              {opioidSecreting ? '已分泌阿片肽' : '分泌阿片肽'}
+              {opioidSecreting ? '已分泌诱导物质' : '分泌诱导物质'}
             </Button>
             <Button 
               onClick={() => addAntibiotic('low')}
@@ -1229,7 +1229,7 @@ const ResistanceSim3D = ({ onExit }) => {
                 }}
               >
                 <div>第{selectedCell.id}代</div>
-                <div>阿片肽浓度: {(selectedCell.opioidConcentration * 100).toFixed(1)}%</div>
+                <div>诱导物质浓度: {(selectedCell.opioidConcentration * 100).toFixed(1)}%</div>
               </div>
             )}
           </div>
@@ -1246,7 +1246,7 @@ const ResistanceSim3D = ({ onExit }) => {
               </div>
               <div className="text-sm space-y-2">
                 <div className="font-bold mb-2">抗药性状态</div>
-                <div>阿片肽分泌: {opioidSecreting ? '是' : '否'}</div>
+                <div>诱导物质分泌: {opioidSecreting ? '是' : '否'}</div>
                 <div>抗生素浓度: {antibioticConcentration === 'none' ? '无' : antibioticConcentration === 'low' ? '低' : '高'}</div>
                 <div>氧气浓度: {environment.oxygen}%</div>
                 <div>温度: {environment.temperature}°C</div>
@@ -1259,8 +1259,8 @@ const ResistanceSim3D = ({ onExit }) => {
             <div className="font-bold mb-2">模拟说明</div>
             <div className="text-sm space-y-2">
               <div><strong>1. 初始状态：</strong>祖细胞（白色）具有抗药质粒，位于中心位置</div>
-              <div><strong>2. 阿片肽分泌：</strong>点击"分泌阿片肽"按钮，祖细胞开始分泌阿片肽（蓝色扩散场）（这个场的渲染调了好久，暂时还没弄好）</div>
-              <div><strong>3. 基因激活：</strong>接收阿片肽的细胞激活抗药基因表达（绿色表示表达强度）</div>
+              <div><strong>2. 诱导物质分泌：</strong>点击"分泌诱导物质"按钮，祖细胞开始分泌诱导物质（蓝色扩散场）</div>
+              <div><strong>3. 基因激活：</strong>接收诱导物质的细胞激活抗药基因表达（绿色表示表达强度）</div>
               <div><strong>4. 抗生素压力：</strong>点击"添加抗生素"按钮，对所有细胞施加选择压力</div>
               <div><strong>5. 细胞死亡：</strong>无抗药性的细胞死亡（变为灰色，之后消失）</div>
               <div><strong>6. 突变进化：</strong>存活细胞可能发生突变（红色），获得更强抗药性（红色越深抗药性越强）</div>
